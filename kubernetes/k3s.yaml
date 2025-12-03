@@ -18,7 +18,7 @@ tasks:
           gum confirm "K3s already installed. Reinstall?" || exit 0
         fi
 
-        OUTPUT_PATH=$(gum input --value "${HOME}k3s-config.yaml" --prompt "Where to save k3s config? [default: ${HOME}k3s-config.yaml]: ")
+        OUTPUT_PATH=$(gum input --value "${HOME}/k3s-config.yaml" --prompt "Where to save k3s config? [default: ${HOME}k3s-config.yaml]: ")
         CLUSTER_NAME=$(gum input --value "k3s" --prompt "Cluster name? [default: k3s]: ")
         ROOT_PATH_KUBECONFIGS="${HOME}/.kube"
 
@@ -99,8 +99,9 @@ tasks:
     deps: [cilium:config]
     cmds:
       - |
-        CILIUM_CONFIG_PATH=$(gum input --value "${HOME}cilium-values.yaml" --prompt "Path to Cilium config? [default: ${HOME}cilium-values.yaml]: ")
+        CILIUM_CONFIG_PATH=$(gum input --value "${HOME}/cilium-values.yaml" --prompt "Path to Cilium config? [default: ${HOME}cilium-values.yaml]: ")
         KUBECONFIG_PATH=$(gum input --value "${HOME}/.kube/k3s" --prompt "Path to kubeconfig? [default: ~/.kube/k3s]: ")
+        export KUBECONFIG="${KUBECONFIG_PATH}"
 
         echo "Installing Cilium ${CILIUM_VERSION} using config ${CILIUM_CONFIG_PATH}..."
         cilium install \
@@ -156,18 +157,3 @@ tasks:
         fi
         gum confirm "This will uninstall K3s and remove data. Continue?" || exit 0
         sudo {{.K3S_UNINSTALL_SCRIPT}}
-
-  do:
-    desc: Select a task to run
-    cmds:
-      - |
-        # Extract task names (keep internal colons, remove only trailing colon)
-        task_name=$(task -l | awk '/^\*/ {print $2}' | sed 's/:$//' | gum choose)
-
-        # Run the selected task
-        [ -n "$task_name" ] && task "$task_name"
-
-  default:
-    desc: Default task is select & do (work)
-    cmds:
-      - task do
