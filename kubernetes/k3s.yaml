@@ -3,6 +3,7 @@ version: "3"
 vars:
   KUBECONFIG_FOLDER: ~/.kube
   DEFAULT_K3S_VERSION: "v1.34.2+k3s1"
+  K3S_UNINSTALL_SCRIPT: /usr/local/bin/k3s-uninstall.sh
 
 tasks:
   install:
@@ -54,6 +55,7 @@ tasks:
 
   cilium:config:
     desc: Generate Cilium Helm values for kube-proxy replacement
+    internal: true
     cmds:
       - |
         OUTPUT_PATH=$(gum input --value "/tmp/cilium-values.yaml" --prompt "Where to save Cilium config? [default: /tmp/cilium-values.yaml]: ")
@@ -126,6 +128,24 @@ tasks:
 
         cilium status --kubeconfig "${KUBECONFIG_PATH}" || true
 
+  cilium:uninstall:
+    desc: Uninstall Cilium CNI
+    cmds:
+      - |
+        KUBECONFIG_PATH=$(gum input --value "${HOME}/.kube/k3s" --prompt "Path to kubeconfig? [default: ~/.kube/k3s]: ")
+
+        if ! kubectl get pods -n kube-system -l k8s-app=cilium --kubeconfig "${KUBECONFIG_PATH}" &>/dev/null; then
+          echo "Cilium not installed."
+          exit 0
+        fi
+
+        gum confirm "This will uninstall Cilium CNI. Continue?" || exit 0
+
+        echo "Uninstalling Cilium..."
+        cilium uninstall --kubeconfig "${KUBECONFIG_PATH}"
+
+        echo "✅ Cilium uninstalled successfully."
+
   uninstall:
     desc: Uninstall K3s completely
     cmds:
@@ -135,4 +155,19 @@ tasks:
           exit 0
         fi
         gum confirm "This will uninstall K3s and remove data. Continue?" || exit 0
-        sudo /usr/local/bin/k3s-uninstall.sh
+        sudo {{.K3S_UNINSTALL_SCRIPT}}
+
+  do:
+    desc: Select a task to run
+    cmds:
+      - |
+        # Extract task names (keep internal colons, remove only trailing colon)
+        task_name=$(task -l | awk '/^\*/ {print $2}' | sed 's/:$//' | gum choose)
+
+        # Run the selected task
+        [ -n "$task_name" ] && task "$task_name"
+
+  default:
+    desc: Default task is select & do (work)
+    cmds:
+      - task do
