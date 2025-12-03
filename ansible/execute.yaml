@@ -1,0 +1,24 @@
+---
+version: 3
+
+tasks:
+  execute-ansible-playbook:
+    desc: Execute Ansible playbook on remote host using Dagger VM module
+    vars:
+      MODULE: github.com/stuttgart-things/blueprints/vm
+      VERSION: v1.33.0
+      FUNCTION: execute-ansible
+      HOSTS:
+        sh: |
+          gum input --placeholder "Hosts e.g. 10.31.103.58,10.31.103.59"
+      PLAYBOOKS:
+        sh: |
+          gum choose --no-limit "sthings.baseos.setup" "sthings.container.docker" | paste -sd ","
+    cmds:
+      - |
+        dagger call -m {{ .MODULE }}@{{ .VERSION }} {{ .FUNCTION }} \
+        --playbooks "{{ .PLAYBOOKS }}" \
+        --hosts "{{ .HOSTS }}" \
+        --ssh-user=env:SSH_USER \
+        --ssh-password=env:SSH_PASSWORD \
+        --progress plain -vv
