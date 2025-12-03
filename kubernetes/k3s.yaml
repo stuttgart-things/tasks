@@ -18,7 +18,7 @@ tasks:
           gum confirm "K3s already installed. Reinstall?" || exit 0
         fi
 
-        OUTPUT_PATH=$(gum input --value "/tmp/k3s-config.yaml" --prompt "Where to save k3s config? [default: /tmp/k3s-config.yaml]: ")
+        OUTPUT_PATH=$(gum input --value "${HOME}k3s-config.yaml" --prompt "Where to save k3s config? [default: ${HOME}k3s-config.yaml]: ")
         CLUSTER_NAME=$(gum input --value "k3s" --prompt "Cluster name? [default: k3s]: ")
         ROOT_PATH_KUBECONFIGS="${HOME}/.kube"
 
@@ -58,7 +58,7 @@ tasks:
     internal: true
     cmds:
       - |
-        OUTPUT_PATH=$(gum input --value "/tmp/cilium-values.yaml" --prompt "Where to save Cilium config? [default: /tmp/cilium-values.yaml]: ")
+        OUTPUT_PATH=$(gum input --value "${HOME}cilium-values.yaml" --prompt "Where to save Cilium config? [default: ${HOME}cilium-values.yaml]: ")
 
         API_SERVER_IP=$(hostname -I | awk '{print $1}')
         API_SERVER_PORT=6443
@@ -99,7 +99,7 @@ tasks:
     deps: [cilium:config]
     cmds:
       - |
-        CILIUM_CONFIG_PATH=$(gum input --value "/tmp/cilium-values.yaml" --prompt "Path to Cilium config? [default: /tmp/cilium-values.yaml]: ")
+        CILIUM_CONFIG_PATH=$(gum input --value "${HOME}cilium-values.yaml" --prompt "Path to Cilium config? [default: ${HOME}cilium-values.yaml]: ")
         KUBECONFIG_PATH=$(gum input --value "${HOME}/.kube/k3s" --prompt "Path to kubeconfig? [default: ~/.kube/k3s]: ")
 
         echo "Installing Cilium ${CILIUM_VERSION} using config ${CILIUM_CONFIG_PATH}..."
