@@ -39,7 +39,7 @@ flannel-backend: "${FLANNEL_BACKEND}"
 disable-kube-proxy: ${DISABLE_KUBE_PROXY}
 disable-network-policy: ${DISABLE_NETWORK_POLICY}
 cluster-init: ${CLUSTER_INIT}
-EOF
+        EOF
 
         if [ "${DISABLE_SERVICELB}" = "true" ] || [ "${DISABLE_TRAEFIK}" = "true" ]; then
           echo "disable:" >> "${OUTPUT_PATH}"
