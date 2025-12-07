@@ -34,11 +34,11 @@ tasks:
         echo "Writing K3s config to ${OUTPUT_PATH}..."
 
         cat > "${OUTPUT_PATH}" <<EOF
-write-kubeconfig-mode: "${KUBECONFIG_MODE}"
-flannel-backend: "${FLANNEL_BACKEND}"
-disable-kube-proxy: ${DISABLE_KUBE_PROXY}
-disable-network-policy: ${DISABLE_NETWORK_POLICY}
-cluster-init: ${CLUSTER_INIT}
+        write-kubeconfig-mode: "${KUBECONFIG_MODE}"
+        flannel-backend: "${FLANNEL_BACKEND}"
+        disable-kube-proxy: ${DISABLE_KUBE_PROXY}
+        disable-network-policy: ${DISABLE_NETWORK_POLICY}
+        cluster-init: ${CLUSTER_INIT}
         EOF
 
         if [ "${DISABLE_SERVICELB}" = "true" ] || [ "${DISABLE_TRAEFIK}" = "true" ]; then
