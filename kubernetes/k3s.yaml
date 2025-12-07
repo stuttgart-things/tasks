@@ -33,7 +33,7 @@ tasks:
         echo ""
         echo "Writing K3s config to ${OUTPUT_PATH}..."
 
-        cat > "${OUTPUT_PATH}" <<EOF
+        cat <<EOF > "${OUTPUT_PATH}"
         write-kubeconfig-mode: "${KUBECONFIG_MODE}"
         flannel-backend: "${FLANNEL_BACKEND}"
         disable-kube-proxy: ${DISABLE_KUBE_PROXY}
