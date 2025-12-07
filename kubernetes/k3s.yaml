@@ -19,18 +19,33 @@ tasks:
         CLUSTER_NAME=$(gum input --value "k3s" --prompt "Cluster name? [default: k3s]: ")
         ROOT_PATH_KUBECONFIGS="${HOME}/.kube"
 
+        echo ""
+        echo "=== K3s Configuration ==="
+        
+        KUBECONFIG_MODE=$(gum input --value "0644" --prompt "Kubeconfig file mode [default: 0644]: ")
+        FLANNEL_BACKEND=$(gum input --value "none" --prompt "Flannel backend [default: none]: ")
+        gum confirm "Disable kube-proxy? [recommended: yes]" && DISABLE_KUBE_PROXY="true" || DISABLE_KUBE_PROXY="false"
+        gum confirm "Disable network policy? [recommended: yes]" && DISABLE_NETWORK_POLICY="true" || DISABLE_NETWORK_POLICY="false"
+        gum confirm "Enable cluster-init? [recommended: yes]" && CLUSTER_INIT="true" || CLUSTER_INIT="false"
+        gum confirm "Disable servicelb? [recommended: yes]" && DISABLE_SERVICELB="true" || DISABLE_SERVICELB="false"
+        gum confirm "Disable traefik? [recommended: yes]" && DISABLE_TRAEFIK="true" || DISABLE_TRAEFIK="false"
+
+        echo ""
         echo "Writing K3s config to ${OUTPUT_PATH}..."
 
         cat <<EOF > "${OUTPUT_PATH}"
-write-kubeconfig-mode: "0644"
-flannel-backend: "none"
-disable-kube-proxy: true
-disable-network-policy: true
-cluster-init: true
-disable:
-  - servicelb
-  - traefik
+write-kubeconfig-mode: "${KUBECONFIG_MODE}"
+flannel-backend: "${FLANNEL_BACKEND}"
+disable-kube-proxy: ${DISABLE_KUBE_PROXY}
+disable-network-policy: ${DISABLE_NETWORK_POLICY}
+cluster-init: ${CLUSTER_INIT}
 EOF
+
+        if [ "${DISABLE_SERVICELB}" = "true" ] || [ "${DISABLE_TRAEFIK}" = "true" ]; then
+          echo "disable:" >> "${OUTPUT_PATH}"
+          [ "${DISABLE_SERVICELB}" = "true" ] && echo "  - servicelb" >> "${OUTPUT_PATH}"
+          [ "${DISABLE_TRAEFIK}" = "true" ] && echo "  - traefik" >> "${OUTPUT_PATH}"
+        fi
 
         cat "${OUTPUT_PATH}"
 
