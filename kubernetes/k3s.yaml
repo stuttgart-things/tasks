@@ -34,12 +34,12 @@ tasks:
         echo "Writing K3s config to ${OUTPUT_PATH}..."
 
         cat <<EOF > "${OUTPUT_PATH}"
-        write-kubeconfig-mode: "${KUBECONFIG_MODE}"
-        flannel-backend: "${FLANNEL_BACKEND}"
-        disable-kube-proxy: ${DISABLE_KUBE_PROXY}
-        disable-network-policy: ${DISABLE_NETWORK_POLICY}
-        cluster-init: ${CLUSTER_INIT}
-        EOF
+write-kubeconfig-mode: "${KUBECONFIG_MODE}"
+flannel-backend: "${FLANNEL_BACKEND}"
+disable-kube-proxy: ${DISABLE_KUBE_PROXY}
+disable-network-policy: ${DISABLE_NETWORK_POLICY}
+cluster-init: ${CLUSTER_INIT}
+EOF
 
         if [ "${DISABLE_SERVICELB}" = "true" ] || [ "${DISABLE_TRAEFIK}" = "true" ]; then
           echo "disable:" >> "${OUTPUT_PATH}"
@@ -78,30 +78,29 @@ tasks:
         echo "Writing Cilium config to ${OUTPUT_PATH}..."
 
         cat <<EOF > "${OUTPUT_PATH}"
-        ---
-        k8sServiceHost: ${API_SERVER_IP}
-        k8sServicePort: ${API_SERVER_PORT}
-        kubeProxyReplacement: true
+k8sServiceHost: ${API_SERVER_IP}
+k8sServicePort: ${API_SERVER_PORT}
+kubeProxyReplacement: true
 
-        l2announcements:
-          enabled: true
+l2announcements:
+  enabled: true
 
-        externalIPs:
-          enabled: true
+externalIPs:
+  enabled: true
 
-        k8sClientRateLimit:
-          qps: 50
-          burst: 200
+k8sClientRateLimit:
+  qps: 50
+  burst: 200
 
-        operator:
-          replicas: 1
-          rollOutPods: true
+operator:
+  replicas: 1
+  rollOutPods: true
 
-        rollOutCiliumPods: true
+rollOutCiliumPods: true
 
-        ingressController:
-          enabled: false
-        EOF
+ingressController:
+  enabled: false
+EOF
 
         cat "${OUTPUT_PATH}"
         echo "✅ Cilium config created at ${OUTPUT_PATH}"
