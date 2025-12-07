@@ -8,51 +8,39 @@ vars:
 tasks:
   install:
     desc: Install K3s cluster (no kube-proxy, no CNI)
+    env:
+      K3S_VERSION:
+        sh: |
+          gum input --value "{{.DEFAULT_K3S_VERSION}}" --prompt "K3S VERSION? [default: {{.DEFAULT_K3S_VERSION}}]: "
     cmds:
       - |
         if command -v k3s >/dev/null 2>&1; then
           gum confirm "K3s already installed. Reinstall?" || exit 0
         fi
 
-        K3S_VERSION=$(gum input --value "{{.DEFAULT_K3S_VERSION}}" --prompt "K3S VERSION? [default: {{.DEFAULT_K3S_VERSION}}]: ")
         OUTPUT_PATH=$(gum input --value "${HOME}/k3s-config.yaml" --prompt "Where to save k3s config? [default: ${HOME}/k3s-config.yaml]: ")
         CLUSTER_NAME=$(gum input --value "k3s" --prompt "Cluster name? [default: k3s]: ")
         ROOT_PATH_KUBECONFIGS="${HOME}/.kube"
 
-        echo ""
-        echo "=== K3s Configuration ==="
-        
-        KUBECONFIG_MODE=$(gum input --value "0644" --prompt "Kubeconfig file mode [default: 0644]: ")
-        FLANNEL_BACKEND=$(gum input --value "none" --prompt "Flannel backend [default: none]: ")
-        gum confirm "Disable kube-proxy? [recommended: yes]" && DISABLE_KUBE_PROXY="true" || DISABLE_KUBE_PROXY="false"
-        gum confirm "Disable network policy? [recommended: yes]" && DISABLE_NETWORK_POLICY="true" || DISABLE_NETWORK_POLICY="false"
-        gum confirm "Enable cluster-init? [recommended: yes]" && CLUSTER_INIT="true" || CLUSTER_INIT="false"
-        gum confirm "Disable servicelb? [recommended: yes]" && DISABLE_SERVICELB="true" || DISABLE_SERVICELB="false"
-        gum confirm "Disable traefik? [recommended: yes]" && DISABLE_TRAEFIK="true" || DISABLE_TRAEFIK="false"
-
-        echo ""
         echo "Writing K3s config to ${OUTPUT_PATH}..."
 
         cat <<EOF > "${OUTPUT_PATH}"
-write-kubeconfig-mode: "${KUBECONFIG_MODE}"
-flannel-backend: "${FLANNEL_BACKEND}"
-disable-kube-proxy: ${DISABLE_KUBE_PROXY}
-disable-network-policy: ${DISABLE_NETWORK_POLICY}
-cluster-init: ${CLUSTER_INIT}
+        write-kubeconfig-mode: 0644
+        flannel-backend: none
+        disable-kube-proxy: true
+        disable-network-policy: true
+        cluster-init: true
+        disable:
+          - servicelb
+          - traefik
         EOF
-
-        if [ "${DISABLE_SERVICELB}" = "true" ] || [ "${DISABLE_TRAEFIK}" = "true" ]; then
-          echo "disable:" >> "${OUTPUT_PATH}"
-          [ "${DISABLE_SERVICELB}" = "true" ] && echo "  - servicelb" >> "${OUTPUT_PATH}"
-          [ "${DISABLE_TRAEFIK}" = "true" ] && echo "  - traefik" >> "${OUTPUT_PATH}"
-        fi
 
         cat "${OUTPUT_PATH}"
 
         gum confirm "Proceed with K3s installation?" || exit 0
 
         echo "Installing K3s ${K3S_VERSION} ..."
-        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="${K3S_VERSION}" K3S_CONFIG_FILE="${OUTPUT_PATH}" sh -s - server
+        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=${K3S_VERSION} K3S_CONFIG_FILE="${OUTPUT_PATH}" sudo sh -
 
         echo "Waiting for K3s to be ready..."
         sleep 5
@@ -78,29 +66,30 @@ cluster-init: ${CLUSTER_INIT}
         echo "Writing Cilium config to ${OUTPUT_PATH}..."
 
         cat <<EOF > "${OUTPUT_PATH}"
-k8sServiceHost: ${API_SERVER_IP}
-k8sServicePort: ${API_SERVER_PORT}
-kubeProxyReplacement: true
+        ---
+        k8sServiceHost: ${API_SERVER_IP}
+        k8sServicePort: ${API_SERVER_PORT}
+        kubeProxyReplacement: true
 
-l2announcements:
-  enabled: true
+        l2announcements:
+          enabled: true
 
-externalIPs:
-  enabled: true
+        externalIPs:
+          enabled: true
 
-k8sClientRateLimit:
-  qps: 50
-  burst: 200
+        k8sClientRateLimit:
+          qps: 50
+          burst: 200
 
-operator:
-  replicas: 1
-  rollOutPods: true
+        operator:
+          replicas: 1
+          rollOutPods: true
 
-rollOutCiliumPods: true
+        rollOutCiliumPods: true
 
-ingressController:
-  enabled: false
-EOF
+        ingressController:
+          enabled: false
+        EOF
 
         cat "${OUTPUT_PATH}"
         echo "✅ Cilium config created at ${OUTPUT_PATH}"
@@ -125,7 +114,7 @@ EOF
         ATTEMPTS=0
         MAX_ATTEMPTS=60
 
-        until kubectl get pods -n kube-system -l k8s-app=cilium -o jsonpath='{.items[*].status.containerStatuses[*].ready}' | grep -qv "false"; do
+        until kubectl get pods -n kube-system -l k8s-app=cilium -o jsonpath='{.items[*].status.containerStatuses[*].ready}' 2>/dev/null | grep -qv "false"; do
           ((ATTEMPTS++))
           if [ ${ATTEMPTS} -ge ${MAX_ATTEMPTS} ]; then
             echo "❌ Timeout waiting for Cilium pods to become ready."
