@@ -8,16 +8,13 @@ vars:
 tasks:
   install:
     desc: Install K3s cluster (no kube-proxy, no CNI)
-    env:
-      K3S_VERSION:
-        sh: |
-          gum input --value "{{.DEFAULT_K3S_VERSION}}" --prompt "K3S VERSION? [default: {{.DEFAULT_K3S_VERSION}}]: "
     cmds:
       - |
         if command -v k3s >/dev/null 2>&1; then
           gum confirm "K3s already installed. Reinstall?" || exit 0
         fi
 
+        K3S_VERSION=$(gum input --value "{{.DEFAULT_K3S_VERSION}}" --prompt "K3S VERSION? [default: {{.DEFAULT_K3S_VERSION}}]: ")
         OUTPUT_PATH=$(gum input --value "${HOME}/k3s-config.yaml" --prompt "Where to save k3s config? [default: ${HOME}/k3s-config.yaml]: ")
         CLUSTER_NAME=$(gum input --value "k3s" --prompt "Cluster name? [default: k3s]: ")
         ROOT_PATH_KUBECONFIGS="${HOME}/.kube"
@@ -40,7 +37,7 @@ tasks:
         gum confirm "Proceed with K3s installation?" || exit 0
 
         echo "Installing K3s ${K3S_VERSION} ..."
-        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=${K3S_VERSION} K3S_CONFIG_FILE="${OUTPUT_PATH}" sudo sh -
+        curl -sfL https://get.k3s.io | sudo INSTALL_K3S_VERSION="${K3S_VERSION}" K3S_CONFIG_FILE="${OUTPUT_PATH}" sh -
 
         echo "Waiting for K3s to be ready..."
         sleep 5
