@@ -1,0 +1,36 @@
+---
+version: 3
+
+tasks:
+  update-ansible-requirements:
+    desc: Update Ansible requirements.yaml file with latest collection versions
+    vars:
+      MODULE: github.com/stuttgart-things/dagger/dependencies
+      VERSION: v0.53.0
+      FUNCTION: apply-ansible-updates
+      DEFAULT_REQUIREMENTS_URL: https://raw.githubusercontent.com/stuttgart-things/ansible/refs/heads/main/requirements.yaml
+      REQUIREMENTS_SOURCE:
+        sh: |
+          if gum confirm "Use default requirements file from stuttgart-things/ansible?"; then
+            echo "{{ .DEFAULT_REQUIREMENTS_URL }}"
+          else
+            gum input --prompt "Enter path or URL to requirements.yaml file: "
+          fi
+      OUTPUT_PATH:
+        sh: gum input --prompt "Enter output path: " --value "/tmp/requirements.yaml"
+      TEMP_REQUIREMENTS: /tmp/requirements-input.yaml
+    cmds:
+      - |
+        # Download requirements file if it's a URL
+        if [[ "{{ .REQUIREMENTS_SOURCE }}" =~ ^https?:// ]]; then
+          wget -q -O {{ .TEMP_REQUIREMENTS }} {{ .REQUIREMENTS_SOURCE }}
+          REQUIREMENTS_FILE="{{ .TEMP_REQUIREMENTS }}"
+        else
+          REQUIREMENTS_FILE="{{ .REQUIREMENTS_SOURCE }}"
+        fi
+
+        dagger call -m {{ .MODULE }}@{{ .VERSION }} {{ .FUNCTION }} \
+        --requirements-file $REQUIREMENTS_FILE \
+        export --path {{ .OUTPUT_PATH }}
+
+        code {{ .OUTPUT_PATH }}
