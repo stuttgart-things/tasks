@@ -1,0 +1,59 @@
+---
+version: 3
+
+tasks:
+  create-configure-cluster:
+    desc: Execute Ansible playbook on remote host using Dagger VM module
+    vars:
+      MODULE: github.com/stuttgart-things/blueprints/vm
+      VERSION: v1.34.0
+      FUNCTION: execute-ansible
+      HOSTS:
+        sh: |
+          gum input --placeholder "Hosts e.g. 10.31.103.58,10.31.103.59"
+      PLAYBOOKS:
+        sh: |
+          gum choose --no-limit "sthings.baseos.setup" "sthings.rke.k3s" | paste -sd ","
+      CONFIGURE_GENERAL:
+        sh: |
+          gum confirm "Configure General Parameters?" && echo "yes" || echo "no"
+      CONFIGURE_CILIUM:
+        sh: |
+          gum confirm "Configure Cilium?" && echo "yes" || echo "no"
+      CONFIGURE_INGRESS_NGINX:
+        sh: |
+          gum confirm "Configure Ingress NGINX?" && echo "yes" || echo "no"
+      GENERAL_PARAMS:
+        sh: |
+          if [ "{{ .CONFIGURE_GENERAL }}" = "yes" ]; then
+            K3S_STATE=$(gum choose --header="K3s state: " "present" "absent")
+            INSTALL_HELM_DIFF=$(gum choose --header "Install helm diff" "true" "false")
+            K3S_VERSION=$(gum input --prompt="K3s version (e.g. 1.34.2): " --value "1.34.2")
+            K3S_RELEASE=$(gum input --prompt="K3s release kind (e.g. k3s1): " --value "k3s1")
+            CLUSTER_SETUP=$(gum choose "singlenode" "multinode")
+            DEPLOY_HELM=$(gum confirm "Deploy Helm Charts?" && echo "true" || echo "false")
+            echo "install_k3s=true k3s_state=${K3S_STATE} k3s_k8s_version=${K3S_VERSION} k3s_release_kind=${K3S_RELEASE} cluster_setup=${CLUSTER_SETUP} install_cillium=true deploy_helm_charts=${DEPLOY_HELM} install_helm_diff=${INSTALL_HELM_DIFF}"
+          else
+            echo "k3s_state=present k3s_k8s_version=1.34.2 k3s_release_kind=k3s1 cluster_setup=singlenode install_cillium=true deploy_helm_charts=true install_helm_diff=true"
+          fi
+      CILIUM_PARAMS:
+        sh: |
+          if [ "{{ .CONFIGURE_CILIUM }}" = "yes" ]; then
+            echo "cilium_lbrange_start_ip=$(gum input --placeholder "CILIUM IP RANGE START e.g. 10.31.103.16") cilium_lbrange_stop_ip=$(gum input --placeholder "CILIUM IP RANGE STOP e.g. 10.31.103.17")"
+          fi
+      INGRESS_NGINX_PARAMS:
+        sh: |
+          if [ "{{ .CONFIGURE_INGRESS_NGINX }}" = "yes" ]; then
+            echo "ingress_service_type=$(gum choose "ClusterIP" "LoadBalancer")"
+          fi
+    cmds:
+      - |
+        dagger call -m {{ .MODULE }}@{{ .VERSION }} {{ .FUNCTION }} \
+        --playbooks "{{ .PLAYBOOKS }}" \
+        --hosts "{{ .HOSTS }}" \
+        --ssh-user=env:SSH_USER \
+        --ssh-password=env:SSH_PASSWORD \
+        --parameters="{{ .GENERAL_PARAMS }} {{ .CILIUM_PARAMS }} {{ .INGRESS_NGINX_PARAMS }}" \
+        --requirementsData="https://raw.githubusercontent.com/stuttgart-things/ansible/refs/heads/main/templates/requirements-data.yaml" \
+        --inventoryType="cluster" \
+        --progress plain -vv
