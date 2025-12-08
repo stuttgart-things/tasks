@@ -6,7 +6,7 @@ tasks:
     desc: Execute Ansible playbook on remote host using Dagger VM module
     vars:
       MODULE: github.com/stuttgart-things/blueprints/vm
-      VERSION: v1.33.0
+      VERSION: v1.34.0
       FUNCTION: execute-ansible
       HOSTS:
         sh: |
