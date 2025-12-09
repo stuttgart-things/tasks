@@ -1,0 +1,31 @@
+---
+datacenter: /LabUL
+resourcePool: /LabUL/host/Cluster-V6.5/Resources
+vaultSecretPath: vsphere-labul
+
+datastores:
+  - /LabUL/datastore/UL-ESX-SAS-01
+  - /LabUL/datastore/UL-ESX-SAS-02
+  - /LabUL/datastore/UL-ESX-NVMe-01
+
+networks:
+  - name: LAB-103 (Production)
+    path: /LabUL/network/LAB-10.31.103
+  - name: LAB-104 (Development)
+    path: /LabUL/network/LAB-10.31.104
+  - name: LAB-105 (Testing)
+    path: /LabUL/network/LAB-10.31.105
+  - name: MGMT-100 (Management)
+    path: /LabUL/network/MGMT-10.31.100
+
+templates:
+  - sthings-u24
+  - sthings-u22
+  - sthings-rhel9
+  - sthings-rocky9
+
+vmFolders:
+  - stuttgart-things/production
+  - stuttgart-things/development
+  - stuttgart-things/testing
+  - stuttgart-things/staging
