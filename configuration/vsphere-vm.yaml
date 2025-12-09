@@ -8,8 +8,8 @@ tasks:
   render-vsphere-vm-config:
     desc: Render vSphere VM configuration and create PR using Dagger
     vars:
-      MODULE: github.com/stuttgart-things/blueprints/configuration
-      VERSION: v1.34.0
+      MODULE: /home/sthings/projects/blueprints/configuration #github.com/stuttgart-things/blueprints/configuration
+      VERSION: v1.34.1
       FUNCTION: vsphere-vm
       ENV:
         sh: |
@@ -19,19 +19,19 @@ tasks:
           gum input --prompt "VM Name: " --placeholder "e.g. demo-infra1, web-server-prod"
       VM_COUNT:
         sh: |
-          gum input --prompt "Number of VMs: " --value "1" --placeholder "How many VMs to create"
+          gum choose --header "Number of VMs" "1" "2" "3" "4" "5"
       VM_RAM:
         sh: |
-          gum input --prompt "RAM (MB): " --value "8192" --placeholder "Memory allocation in megabytes"
+          gum choose --header "RAM (GB)" "6" "8" "12" "16" "24"
       VM_TEMPLATE:
         sh: |
           gum choose --header "Select VM Template" $(yq eval '.templates[]' configs/{{ .ENV }}.yaml)
       VM_DISK:
         sh: |
-          gum input --prompt "Disk Size (GB): " --value "64" --placeholder "Root disk size in gigabytes"
+          gum choose --header "Disk Size (GB)" "32" "64" "96" "128" "192" "256"
       VM_CPU:
         sh: |
-          gum input --prompt "CPU Cores: " --value "8" --placeholder "Number of virtual CPUs"
+          gum choose --header "CPU Cores" "4" "6" "8" "12" "16"
       VM_FIRMWARE:
         sh: |
           gum choose --header "Select Firmware Type" "bios" "efi"
@@ -58,39 +58,79 @@ tasks:
       USE_VAULT:
         sh: |
           gum choose --header "Use HashiCorp Vault for credentials?" --selected="false" "true" "false"
-      REPOSITORY:
-        sh: |
-          gum input --prompt "GitHub Repository: " --value "${GITHUB_REPOSITORY:-stuttgart-things/blueprints}" --placeholder "org/repo"
-      BRANCH_NAME:
-        sh: |
-          gum input --prompt "Branch Name: " --value "feat/vm-{{ .VM_NAME }}" --placeholder "Git branch to create/use"
-      COMMIT_MESSAGE:
-        sh: |
-          gum input --prompt "Commit Message: " --value "Add vSphere VM configuration for {{ .VM_NAME }} in {{ .ENV }}"
-      DESTINATION_FOLDER:
-        sh: |
-          gum input --prompt "Destination Folder: " --value "{{ .VM_NAME }}-{{ .ENV }}" --placeholder "Folder name in repository"
-      DESTINATION_BASE_PATH:
-        sh: |
-          gum input --prompt "Base Path: " --value "./" --placeholder "Base path in repository"
-      AUTHOR_NAME:
-        sh: |
-          gum input --prompt "Author Name: " --value "$(git config user.name)" --placeholder "Your full name"
-      AUTHOR_EMAIL:
-        sh: |
-          gum input --prompt "Author Email: " --value "$(git config user.email)" --placeholder "your.email@example.com"
-      PR_TITLE:
-        sh: |
-          gum input --prompt "PR Title: " --value "Add vSphere VM configuration for {{ .VM_NAME }} in {{ .ENV }}"
-      CREATE_BRANCH:
-        sh: |
-          gum choose --header "Create new branch?" --selected="true" "true" "false"
       COMMIT_CONFIG:
         sh: |
-          gum choose --header "Commit configuration?" --selected="true" "true" "false"
+          gum choose --header "Commit configuration to Git?" --selected="true" "true" "false"
+      REPOSITORY:
+        sh: |
+          if [ "{{ .COMMIT_CONFIG }}" = "false" ]; then
+            echo ""
+          else
+            gum input --prompt "GitHub Repository: " --value "${GITHUB_REPOSITORY:-stuttgart-things/blueprints}" --placeholder "org/repo"
+          fi
+      CREATE_BRANCH:
+        sh: |
+          if [ "{{ .COMMIT_CONFIG }}" = "false" ]; then
+            echo "false"
+          else
+            gum choose --header "Create new branch?" --selected="true" "true" "false"
+          fi
+      BRANCH_NAME:
+        sh: |
+          if [ "{{ .COMMIT_CONFIG }}" = "false" ]; then
+            echo ""
+          else
+            gum input --prompt "Branch Name: " --value "feat/vm-{{ .VM_NAME }}" --placeholder "Git branch to create/use"
+          fi
+      COMMIT_MESSAGE:
+        sh: |
+          if [ "{{ .COMMIT_CONFIG }}" = "false" ]; then
+            echo ""
+          else
+            gum input --prompt "Commit Message: " --value "Add vSphere VM configuration for {{ .VM_NAME }} in {{ .ENV }}"
+          fi
+      DESTINATION_FOLDER:
+        sh: |
+          if [ "{{ .COMMIT_CONFIG }}" = "false" ]; then
+            echo ""
+          else
+            gum input --prompt "Destination Folder: " --value "{{ .VM_NAME }}-{{ .ENV }}" --placeholder "Folder name in repository"
+          fi
+      DESTINATION_BASE_PATH:
+        sh: |
+          if [ "{{ .COMMIT_CONFIG }}" = "false" ]; then
+            echo ""
+          else
+            gum input --prompt "Base Path: " --value "./" --placeholder "Base path in repository"
+          fi
+      AUTHOR_NAME:
+        sh: |
+          if [ "{{ .COMMIT_CONFIG }}" = "false" ]; then
+            echo ""
+          else
+            gum input --prompt "Author Name: " --value "$(git config user.name)" --placeholder "Your full name"
+          fi
+      AUTHOR_EMAIL:
+        sh: |
+          if [ "{{ .COMMIT_CONFIG }}" = "false" ]; then
+            echo ""
+          else
+            gum input --prompt "Author Email: " --value "$(git config user.email)" --placeholder "your.email@example.com"
+          fi
       CREATE_PR:
         sh: |
-          gum choose --header "Create Pull Request?" --selected="true" "true" "false"
+          if [ "{{ .COMMIT_CONFIG }}" = "false" ]; then
+            echo "false"
+          else
+            gum choose --header "Create Pull Request?" --selected="true" "true" "false"
+          fi
+      PR_TITLE:
+        sh: |
+          if [ "{{ .CREATE_PR }}" = "false" ] || [ "{{ .COMMIT_CONFIG }}" = "false" ]; then
+            echo ""
+          else
+            gum input --prompt "PR Title: " --value "Add vSphere VM configuration for {{ .VM_NAME }} in {{ .ENV }}"
+          fi
       EXPORT_PATH:
         sh: |
           gum input --prompt "Export Path: " --value "/tmp/exports/{{ .VM_NAME }}" --placeholder "Local export directory"
@@ -100,7 +140,7 @@ tasks:
         echo "   Environment: {{ .ENV }}"
         echo "   VM Name: {{ .VM_NAME }}"
         echo "   Count: {{ .VM_COUNT }}"
-        echo "   Resources: {{ .VM_CPU }} vCPU, {{ .VM_RAM }} MB RAM, {{ .VM_DISK }} GB Disk"
+        echo "   Resources: {{ .VM_CPU }} vCPU, {{ .VM_RAM }} GB RAM, {{ .VM_DISK }} GB Disk"
         echo ""
       - |
         PR_BODY="This PR adds the rendered vSphere VM configuration for {{ .VM_NAME }} in {{ .ENV }} environment.
@@ -108,11 +148,13 @@ tasks:
         Environment: {{ .ENV }}
         VM Name: {{ .VM_NAME }}
         VM Count: {{ .VM_COUNT }}
-        Resources: {{ .VM_CPU }} vCPU, {{ .VM_RAM }} MB RAM, {{ .VM_DISK }} GB Disk"
+        Resources: {{ .VM_CPU }} vCPU, {{ .VM_RAM }} GB RAM, {{ .VM_DISK }} GB Disk"
 
-        dagger call -m {{ .MODULE }}@{{ .VERSION }} {{ .FUNCTION }} \
+        #@{{ .VERSION }}
+
+        dagger call -m {{ .MODULE }} {{ .FUNCTION }} \
         --src ./ \
-        --config-parameters "name={{ .VM_NAME }},count={{ .VM_COUNT }},ram={{ .VM_RAM }},template={{ .VM_TEMPLATE }},disk={{ .VM_DISK }},cpu={{ .VM_CPU }},firmware={{ .VM_FIRMWARE }},vm_folder={{ .VM_FOLDER }},datacenter={{ .DATACENTER }},datastore={{ .DATASTORE }},resourcePool={{ .RESOURCE_POOL }},network={{ .NETWORK }},useVault={{ .USE_VAULT }},vaultSecretPath={{ .VAULT_SECRET_PATH }}" \
+        --config-parameters "name={{ .VM_NAME }},count={{ .VM_COUNT }},ram=$(({{ .VM_RAM }} * 1024)),template={{ .VM_TEMPLATE }},disk={{ .VM_DISK }},cpu={{ .VM_CPU }},firmware={{ .VM_FIRMWARE }},vm_folder={{ .VM_FOLDER }},datacenter={{ .DATACENTER }},datastore={{ .DATASTORE }},resourcePool={{ .RESOURCE_POOL }},network={{ .NETWORK }},useVault={{ .USE_VAULT }},vaultSecretPath={{ .VAULT_SECRET_PATH }},ansibleRequirementsFile=./requirements.yaml" \
         --token=env:GITHUB_TOKEN \
         --repository "{{ .REPOSITORY }}" \
         --branch-name "{{ .BRANCH_NAME }}" \
