@@ -93,7 +93,7 @@ tasks:
           gum choose --header "Create Pull Request?" --selected="true" "true" "false"
       EXPORT_PATH:
         sh: |
-          gum input --prompt "Export Path: " --value "./exports/{{ .VM_NAME }}" --placeholder "Local export directory"
+          gum input --prompt "Export Path: " --value "/tmp/exports/{{ .VM_NAME }}" --placeholder "Local export directory"
     cmds:
       - |
         echo "🚀 Rendering vSphere VM configuration..."
