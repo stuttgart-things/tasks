@@ -1,0 +1,191 @@
+---
+version: 3
+
+dotenv:
+  - .env
+
+tasks:
+  render-vsphere-vm-config:
+    desc: Render vSphere VM configuration and create PR using Dagger
+    vars:
+      MODULE: github.com/stuttgart-things/blueprints/configuration
+      VERSION: v1.34.0
+      FUNCTION: vsphere-vm
+      ENV:
+        sh: |
+          ls configs/*.yaml | xargs -n1 basename | sed 's/.yaml//' | gum choose --header "Select vSphere Environment"
+      VM_NAME:
+        sh: |
+          gum input --prompt "VM Name: " --placeholder "e.g. demo-infra1, web-server-prod"
+      VM_COUNT:
+        sh: |
+          gum input --prompt "Number of VMs: " --value "1" --placeholder "How many VMs to create"
+      VM_RAM:
+        sh: |
+          gum input --prompt "RAM (MB): " --value "8192" --placeholder "Memory allocation in megabytes"
+      VM_TEMPLATE:
+        sh: |
+          gum choose --header "Select VM Template" $(yq eval '.templates[]' configs/{{ .ENV }}.yaml)
+      VM_DISK:
+        sh: |
+          gum input --prompt "Disk Size (GB): " --value "64" --placeholder "Root disk size in gigabytes"
+      VM_CPU:
+        sh: |
+          gum input --prompt "CPU Cores: " --value "8" --placeholder "Number of virtual CPUs"
+      VM_FIRMWARE:
+        sh: |
+          gum choose --header "Select Firmware Type" "bios" "efi"
+      VM_FOLDER:
+        sh: |
+          gum choose --header "Select VM Folder" $(yq eval '.vmFolders[]' configs/{{ .ENV }}.yaml)
+      NETWORK:
+        sh: |
+          yq eval '.networks[] | .name + "|" + .path' configs/{{ .ENV }}.yaml | \
+          gum choose --header "Select Network" | \
+          cut -d'|' -f2
+      DATACENTER:
+        sh: |
+          yq eval '.datacenter' configs/{{ .ENV }}.yaml
+      DATASTORE:
+        sh: |
+          yq eval '.datastores[]' configs/{{ .ENV }}.yaml | gum choose --header "Select Datastore"
+      RESOURCE_POOL:
+        sh: |
+          yq eval '.resourcePool' configs/{{ .ENV }}.yaml
+      VAULT_SECRET_PATH:
+        sh: |
+          yq eval '.vaultSecretPath' configs/{{ .ENV }}.yaml
+      USE_VAULT:
+        sh: |
+          gum choose --header "Use HashiCorp Vault for credentials?" --selected="false" "true" "false"
+      REPOSITORY:
+        sh: |
+          gum input --prompt "GitHub Repository: " --value "${GITHUB_REPOSITORY:-stuttgart-things/blueprints}" --placeholder "org/repo"
+      BRANCH_NAME:
+        sh: |
+          gum input --prompt "Branch Name: " --value "feat/vm-{{ .VM_NAME }}" --placeholder "Git branch to create/use"
+      COMMIT_MESSAGE:
+        sh: |
+          gum input --prompt "Commit Message: " --value "Add vSphere VM configuration for {{ .VM_NAME }} in {{ .ENV }}"
+      DESTINATION_FOLDER:
+        sh: |
+          gum input --prompt "Destination Folder: " --value "{{ .VM_NAME }}-{{ .ENV }}" --placeholder "Folder name in repository"
+      DESTINATION_BASE_PATH:
+        sh: |
+          gum input --prompt "Base Path: " --value "./" --placeholder "Base path in repository"
+      AUTHOR_NAME:
+        sh: |
+          gum input --prompt "Author Name: " --value "$(git config user.name)" --placeholder "Your full name"
+      AUTHOR_EMAIL:
+        sh: |
+          gum input --prompt "Author Email: " --value "$(git config user.email)" --placeholder "your.email@example.com"
+      PR_TITLE:
+        sh: |
+          gum input --prompt "PR Title: " --value "Add vSphere VM configuration for {{ .VM_NAME }} in {{ .ENV }}"
+      CREATE_BRANCH:
+        sh: |
+          gum choose --header "Create new branch?" --selected="true" "true" "false"
+      COMMIT_CONFIG:
+        sh: |
+          gum choose --header "Commit configuration?" --selected="true" "true" "false"
+      CREATE_PR:
+        sh: |
+          gum choose --header "Create Pull Request?" --selected="true" "true" "false"
+      EXPORT_PATH:
+        sh: |
+          gum input --prompt "Export Path: " --value "./exports/{{ .VM_NAME }}" --placeholder "Local export directory"
+    cmds:
+      - |
+        echo "🚀 Rendering vSphere VM configuration..."
+        echo "   Environment: {{ .ENV }}"
+        echo "   VM Name: {{ .VM_NAME }}"
+        echo "   Count: {{ .VM_COUNT }}"
+        echo "   Resources: {{ .VM_CPU }} vCPU, {{ .VM_RAM }} MB RAM, {{ .VM_DISK }} GB Disk"
+        echo ""
+      - |
+        PR_BODY="This PR adds the rendered vSphere VM configuration for {{ .VM_NAME }} in {{ .ENV }} environment.
+
+        Environment: {{ .ENV }}
+        VM Name: {{ .VM_NAME }}
+        VM Count: {{ .VM_COUNT }}
+        Resources: {{ .VM_CPU }} vCPU, {{ .VM_RAM }} MB RAM, {{ .VM_DISK }} GB Disk"
+
+        dagger call -m {{ .MODULE }}@{{ .VERSION }} {{ .FUNCTION }} \
+        --src ./ \
+        --config-parameters "name={{ .VM_NAME }},count={{ .VM_COUNT }},ram={{ .VM_RAM }},template={{ .VM_TEMPLATE }},disk={{ .VM_DISK }},cpu={{ .VM_CPU }},firmware={{ .VM_FIRMWARE }},vm_folder={{ .VM_FOLDER }},datacenter={{ .DATACENTER }},datastore={{ .DATASTORE }},resourcePool={{ .RESOURCE_POOL }},network={{ .NETWORK }},useVault={{ .USE_VAULT }},vaultSecretPath={{ .VAULT_SECRET_PATH }}" \
+        --token=env:GITHUB_TOKEN \
+        --repository "{{ .REPOSITORY }}" \
+        --branch-name "{{ .BRANCH_NAME }}" \
+        --commit-message "{{ .COMMIT_MESSAGE }}" \
+        --destination-folder "{{ .DESTINATION_FOLDER }}" \
+        --destination-base-path "{{ .DESTINATION_BASE_PATH }}" \
+        --author-name "{{ .AUTHOR_NAME }}" \
+        --author-email "{{ .AUTHOR_EMAIL }}" \
+        --pull-request-title "{{ .PR_TITLE }}" \
+        --pull-request-body "$PR_BODY" \
+        --create-branch={{ .CREATE_BRANCH }} \
+        --commit-config={{ .COMMIT_CONFIG }} \
+        --create-pull-request={{ .CREATE_PR }} \
+        export --path={{ .EXPORT_PATH }}
+      - |
+        echo ""
+        echo "✅ Configuration rendered successfully!"
+        echo "   Exported to: {{ .EXPORT_PATH }}"
+
+  list-environments:
+    desc: List all available vSphere environments
+    cmds:
+      - |
+        echo "📋 Available vSphere Environments:"
+        echo ""
+        for config in configs/*.yaml; do
+          env=$(basename "$config" .yaml)
+          dc=$(yq eval '.datacenter' "$config")
+          echo "  • $env"
+          echo "    Datacenter: $dc"
+          echo ""
+        done
+
+  show-environment:
+    desc: Show details of a specific environment
+    vars:
+      ENV:
+        sh: |
+          ls configs/*.yaml | xargs -n1 basename | sed 's/.yaml//' | gum choose --header "Select environment to view"
+    cmds:
+      - |
+        echo "🌐 Environment: {{ .ENV }}"
+        echo ""
+        echo "Datacenter: $(yq eval '.datacenter' configs/{{ .ENV }}.yaml)"
+        echo "Resource Pool: $(yq eval '.resourcePool' configs/{{ .ENV }}.yaml)"
+        echo ""
+        echo "📦 Datastores:"
+        yq eval '.datastores[]' configs/{{ .ENV }}.yaml | sed 's/^/  • /'
+        echo ""
+        echo "🌐 Networks:"
+        yq eval '.networks[] | "  • " + .name' configs/{{ .ENV }}.yaml
+        echo ""
+        echo "📀 Templates:"
+        yq eval '.templates[]' configs/{{ .ENV }}.yaml | sed 's/^/  • /'
+        echo ""
+        echo "📁 VM Folders:"
+        yq eval '.vmFolders[]' configs/{{ .ENV }}.yaml | sed 's/^/  • /'
+
+  validate-configs:
+    desc: Validate all environment configuration files
+    cmds:
+      - |
+        echo "🔍 Validating configuration files..."
+        echo ""
+        for config in configs/*.yaml; do
+          env=$(basename "$config" .yaml)
+          echo -n "Checking $env... "
+          if yq eval '.' "$config" > /dev/null 2>&1; then
+            echo "✅"
+          else
+            echo "❌ Invalid YAML"
+            exit 1
+          fi
+        done
+        echo ""
+        echo "✅ All configurations are valid!"
