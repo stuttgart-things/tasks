@@ -1,7 +1,7 @@
 ---
 datacenter: /LabUL
 resourcePool: /LabUL/host/Cluster-V6.5/Resources
-vaultSecretPath: vsphere-labul
+vaultSecretPath: vsphere-labul # pragma: allowlist secret
 
 datastores:
   - /LabUL/datastore/UL-ESX-SAS-01

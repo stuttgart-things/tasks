@@ -1,5 +1,0 @@
-# blalba vm
-
-## CREATE
-
-## DESTROY
