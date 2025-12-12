@@ -8,6 +8,14 @@ tasks:
       MODULE: github.com/stuttgart-things/blueprints/vm
       VERSION: v1.34.0
       FUNCTION: execute-ansible
+      DEFAULT_REQUIREMENTS_URL: https://raw.githubusercontent.com/stuttgart-things/ansible/refs/heads/main/requirements.yaml
+      REQUIREMENTS_SOURCE:
+        sh: |
+          if gum confirm "Use default requirements file from stuttgart-things/ansible?"; then
+            echo "{{ .DEFAULT_REQUIREMENTS_URL }}"
+          else
+            gum input --prompt "Enter path or URL to requirements.yaml file: "
+          fi
       HOSTS:
         sh: |
           gum input --placeholder "Hosts e.g. 10.31.103.58,10.31.103.59"
@@ -16,8 +24,17 @@ tasks:
           gum choose --no-limit "sthings.baseos.setup" "sthings.container.docker" | paste -sd ","
     cmds:
       - |
+        # Download requirements file if it's a URL
+        if [[ "{{ .REQUIREMENTS_SOURCE }}" =~ ^https?:// ]]; then
+          wget -q -O {{ .TEMP_REQUIREMENTS }} {{ .REQUIREMENTS_SOURCE }}
+          REQUIREMENTS_FILE="{{ .TEMP_REQUIREMENTS }}"
+        else
+          REQUIREMENTS_FILE="{{ .REQUIREMENTS_SOURCE }}"
+        fi
+
         dagger call -m {{ .MODULE }}@{{ .VERSION }} {{ .FUNCTION }} \
         --playbooks "{{ .PLAYBOOKS }}" \
+        --requirements ${REQUIREMENTS_FILE} \
         --hosts "{{ .HOSTS }}" \
         --ssh-user=env:SSH_USER \
         --ssh-password=env:SSH_PASSWORD \
