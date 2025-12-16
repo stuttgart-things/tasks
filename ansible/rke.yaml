@@ -8,6 +8,14 @@ tasks:
       MODULE: github.com/stuttgart-things/blueprints/vm
       VERSION: v1.34.0
       FUNCTION: execute-ansible
+      DEFAULT_REQUIREMENTS_URL: https://raw.githubusercontent.com/stuttgart-things/ansible/refs/heads/main/requirements.yaml
+      REQUIREMENTS_SOURCE:
+        sh: |
+          if gum confirm "Use default requirements file from stuttgart-things/ansible?"; then
+            echo "{{ .DEFAULT_REQUIREMENTS_URL }}"
+          else
+            gum input --prompt "Enter path or URL to requirements.yaml file: "
+          fi
       HOSTS:
         sh: |
           gum input --placeholder "Hosts e.g. 10.31.103.58,10.31.103.59"
@@ -48,22 +56,43 @@ tasks:
           fi
     cmds:
       - |
+        # Download requirements file if it's a URL
+        if [[ -n "{{ .REQUIREMENTS_SOURCE }}" && "{{ .REQUIREMENTS_SOURCE }}" =~ ^https?:// ]]; then
+          REQUIREMENTS_FILE="$(mktemp)"
+          wget -q -O "${REQUIREMENTS_FILE}" "{{ .REQUIREMENTS_SOURCE }}"
+        else
+          REQUIREMENTS_FILE="{{ .REQUIREMENTS_SOURCE }}"
+        fi
+
+        if [ -z "${REQUIREMENTS_FILE}" ]; then
+          echo "ERROR: REQUIREMENTS_FILE is empty"
+          exit 1
+        fi
+
         dagger call -m {{ .MODULE }}@{{ .VERSION }} {{ .FUNCTION }} \
         --playbooks "{{ .PLAYBOOKS }}" \
         --hosts "{{ .HOSTS }}" \
         --ssh-user=env:SSH_USER \
         --ssh-password=env:SSH_PASSWORD \
         --parameters="{{ .GENERAL_PARAMS }} {{ .CILIUM_PARAMS }} {{ .INGRESS_NGINX_PARAMS }}" \
-        --requirementsData="https://raw.githubusercontent.com/stuttgart-things/ansible/refs/heads/main/templates/requirements-data.yaml" \
+        --requirements ${REQUIREMENTS_FILE} \
         --inventoryType="cluster" \
         --progress plain -vv
 
-  create-configure-rke2-cluster:
+create-configure-rke2-cluster:
     desc: Execute Ansible playbook for RKE2 cluster on remote host using Dagger VM module
     vars:
       MODULE: github.com/stuttgart-things/blueprints/vm
       VERSION: v1.34.0
       FUNCTION: execute-ansible
+      DEFAULT_REQUIREMENTS_URL: https://raw.githubusercontent.com/stuttgart-things/ansible/refs/heads/main/templates/requirements-data.yaml
+      REQUIREMENTS_SOURCE:
+        sh: |
+          if gum confirm "Use default requirements-data file from stuttgart-things/ansible?"; then
+            echo "{{ .DEFAULT_REQUIREMENTS_URL }}"
+          else
+            gum input --prompt "Enter path or URL to requirements-data.yaml file: "
+          fi
       HOSTS:
         sh: |
           gum input --placeholder "Hosts e.g. 10.31.103.58,10.31.103.59"
@@ -110,6 +139,6 @@ tasks:
         --ssh-user=env:SSH_USER \
         --ssh-password=env:SSH_PASSWORD \
         --parameters="{{ .GENERAL_PARAMS }} {{ .CILIUM_PARAMS }} {{ .INGRESS_NGINX_PARAMS }}" \
-        --requirementsData="https://raw.githubusercontent.com/stuttgart-things/ansible/refs/heads/main/templates/requirements-data.yaml" \
+        --requirementsData="{{ .REQUIREMENTS_SOURCE }}" \
         --inventoryType="cluster" \
         --progress plain -vv
