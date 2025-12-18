@@ -1,0 +1,107 @@
+---
+version: 3
+
+tasks:
+  create-kind-cluster:
+    desc: Create a Kind Kubernetes cluster using Dagger Kind module
+    vars:
+      MODULE: github.com/stuttgart-things/dagger/kcl
+      OCI_SOURCE: ghcr.io/stuttgart-things/kind-cluster:0.1.0
+      OUTPUT_PATH: /tmp/kind.yaml
+      DEFAULT_CLUSTER_NAME: dev
+      DEFAULT_API_SERVER_ADDRESS: 192.168.178.175
+      DEFAULT_PORT_RANGE_START: 32100
+      DEFAULT_PORT_RANGE_COUNT: 2
+      CLUSTER_NAME:
+        sh: |
+          if [[ -n "${CLUSTER_NAME:-}" ]]; then
+            if gum confirm --default=true "CLUSTER_NAME is set to '${CLUSTER_NAME}'. Keep it?"; then
+              echo "${CLUSTER_NAME}"
+            else
+              gum input --prompt "Enter cluster name: " --value "{{ .DEFAULT_CLUSTER_NAME }}"
+            fi
+          else
+            gum input --prompt "Enter cluster name: " --value "{{ .DEFAULT_CLUSTER_NAME }}"
+          fi
+      API_SERVER_ADDRESS:
+        sh: |
+          if [[ -n "${API_SERVER_ADDRESS:-}" ]]; then
+            if gum confirm --default=true "API_SERVER_ADDRESS is set to '${API_SERVER_ADDRESS}'. Keep it?"; then
+              echo "${API_SERVER_ADDRESS}"
+            else
+              gum input --prompt "Enter API server address: " --value "{{ .DEFAULT_API_SERVER_ADDRESS }}"
+            fi
+          else
+            gum input --prompt "Enter API server address: " --value "{{ .DEFAULT_API_SERVER_ADDRESS }}"
+          fi
+      PORT_RANGE_START:
+        sh: |
+          if [[ -n "${PORT_RANGE_START:-}" ]]; then
+            if gum confirm --default=true "PORT_RANGE_START is set to '${PORT_RANGE_START}'. Keep it?"; then
+              echo "${PORT_RANGE_START}"
+            else
+              gum input --prompt "Enter port range start: " --value "{{ .DEFAULT_PORT_RANGE_START }}"
+            fi
+          else
+            gum input --prompt "Enter port range start: " --value "{{ .DEFAULT_PORT_RANGE_START }}"
+          fi
+      PORT_RANGE_COUNT:
+        sh: |
+          if [[ -n "${PORT_RANGE_COUNT:-}" ]]; then
+            if gum confirm --default=true "PORT_RANGE_COUNT is set to '${PORT_RANGE_COUNT}'. Keep it?"; then
+              echo "${PORT_RANGE_COUNT}"
+            else
+              gum input --prompt "Enter port range count: " --value "{{ .DEFAULT_PORT_RANGE_COUNT }}"
+            fi
+          else
+            gum input --prompt "Enter port range count: " --value "{{ .DEFAULT_PORT_RANGE_COUNT }}"
+          fi
+      ADVANCED_CONFIG:
+        sh: |
+          gum confirm "Configure advanced options (node image, API server port)?" && echo "true" || echo "false"
+      NODE_IMAGE:
+        sh: |
+          if [[ "{{ .ADVANCED_CONFIG }}" == "true" ]]; then
+            gum input --prompt "Enter node image: " --value "kindest/node:v1.34.0"
+          else
+            echo "kindest/node:v1.34.0"
+          fi
+      API_SERVER_PORT:
+        sh: |
+          if [[ "{{ .ADVANCED_CONFIG }}" == "true" ]]; then
+            gum input --prompt "Enter API server port: " --value "31643"
+          else
+            echo "31643"
+          fi
+      PARAMETERS:
+        sh: |
+          params="portRangeStart={{ .PORT_RANGE_START }},portRangeCount={{ .PORT_RANGE_COUNT }},clusterName={{ .CLUSTER_NAME }},apiServerAddress={{ .API_SERVER_ADDRESS }}"
+          if [[ "{{ .ADVANCED_CONFIG }}" == "true" ]]; then
+            params="${params},nodeImage={{ .NODE_IMAGE }},apiServerPort={{ .API_SERVER_PORT }}"
+          fi
+          echo "$params"
+    cmds:
+      - |
+        echo "Creating Kind cluster with the following configuration:"
+        echo "  Cluster Name: {{ .CLUSTER_NAME }}"
+        echo "  API Server Address: {{ .API_SERVER_ADDRESS }}"
+        echo "  Port Range: {{ .PORT_RANGE_START }}-$(({{ .PORT_RANGE_START }} + {{ .PORT_RANGE_COUNT }} - 1))"
+        if [[ "{{ .ADVANCED_CONFIG }}" == "true" ]]; then
+          echo "  Node Image: {{ .NODE_IMAGE }}"
+          echo "  API Server Port: {{ .API_SERVER_PORT }}"
+        fi
+        echo ""
+      - |
+        dagger call -m {{ .MODULE }} run \
+          --oci-source={{ .OCI_SOURCE }} \
+          --parameters "{{ .PARAMETERS }}" \
+          --format-output=false \
+          export --path={{ .OUTPUT_PATH }}
+      - |
+        echo ""
+        echo "✓ Kind cluster configuration exported to {{ .OUTPUT_PATH }}"
+        if gum confirm "Apply the cluster configuration now?"; then
+          kind create cluster --config {{ .OUTPUT_PATH }}
+        else
+          echo "You can apply it later with: kind create cluster --config {{ .OUTPUT_PATH }}"
+        fi

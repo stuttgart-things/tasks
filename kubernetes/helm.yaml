@@ -1,0 +1,20 @@
+---
+
+dagger call -m github.com/stuttgart-things/dagger/kubernetes@v0.57.0 kubectl \
+--operation apply  \
+--kustomize-source https://github.com/stuttgart-things/helm/infra/crds/cilium  \
+  --kube-config file://config.yaml
+
+
+
+  git::https://github.com/stuttgart-things/helm.git@infra/cilium.yaml.gotmpl
+
+
+dagger call -m github.com/stuttgart-things/dagger/helm@v0.57.0 helmfile-operation \
+--helmfile-ref "git::https://github.com/stuttgart-things/helm.git@infra/cilium.yaml.gotmpl" \
+--operation apply \
+--state-values "config=kind,clusterName=dev,configureLB=false" \
+--kube-config file://config.yaml \
+--progress plain -vv
+
+dagger call -m github.com/stuttgart-things/dagger/helm@v0.57.0 helmfile-operation --helmfile-ref "git::https://github.com/stuttgart-things/helm.git@cicd/crossplane.yaml.gotmpl" --operation apply --state-values "version=2.1.3" --kube-config file://config.yaml --progress plain -vv

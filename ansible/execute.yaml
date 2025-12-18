@@ -17,6 +17,36 @@ tasks:
           else
             gum input --prompt "Enter path or URL to requirements.yaml file: "
           fi
+      REQUIREMENTS_FILE:
+        sh: |
+          if [[ "{{ .REQUIREMENTS_SOURCE }}" =~ ^https?:// ]]; then
+            wget -q -O {{ .TEMP_REQUIREMENTS }} {{ .REQUIREMENTS_SOURCE }}
+            echo "{{ .TEMP_REQUIREMENTS }}"
+          else
+            echo "{{ .REQUIREMENTS_SOURCE }}"
+          fi
+      SSH_USER:
+        sh: |
+          if [[ -n "${SSH_USER:-}" ]]; then
+            if gum confirm --default=true "SSH_USER is set to '${SSH_USER}'. Keep it?"; then
+              echo "${SSH_USER}"
+            else
+              gum input --prompt 'Enter SSH_USER: '
+            fi
+          else
+            gum input --prompt 'Enter SSH_USER: '
+          fi
+      SSH_PASSWORD:
+        sh: |
+          if [[ -n "${SSH_PASSWORD:-}" ]]; then
+            if gum confirm --default=true "SSH_PASSWORD is set (hidden). Keep it?"; then
+              echo "${SSH_PASSWORD}"
+            else
+              gum input --password --prompt 'Enter SSH_PASSWORD: '
+            fi
+          else
+            gum input --password --prompt 'Enter SSH_PASSWORD: '
+          fi
       HOSTS:
         sh: |
           gum input --placeholder "Hosts e.g. 10.31.103.58,10.31.103.59"
@@ -28,48 +58,83 @@ tasks:
           gum input --placeholder "Parameters e.g. manage_filesystem=true,lvm_var_sizing=50%"
     cmds:
       - |
-        # CHECK FOR EXISTING ENV VARS
-
-        # --- SSH_USER ---
-        if [[ -n "${SSH_USER:-}" ]]; then
-          if gum confirm --default=true "SSH_USER is set to '${SSH_USER}'. Keep it?"; then
-            export SSH_USER
-          else
-            export SSH_USER="$(gum input --prompt 'Enter SSH_USER: ')"
-          fi
-        else
-          export SSH_USER="$(gum input --prompt 'Enter SSH_USER: ')"
-        fi
-
-        # --- SSH_PASSWORD ---
-        if [[ -n "${SSH_PASSWORD:-}" ]]; then
-          if gum confirm --default=true "SSH_PASSWORD is set (hidden). Keep it?"; then
-            export SSH_PASSWORD
-          else
-            export SSH_PASSWORD="$(gum input --password --prompt 'Enter SSH_PASSWORD: ')"
-          fi
-        else
-          export SSH_PASSWORD="$(gum input --password --prompt 'Enter SSH_PASSWORD: ')"
-        fi
-
-      - |
-        # GET REQUIREMENTS FILE
-
-        # Download requirements file if it's a URL
-        if [[ "{{ .REQUIREMENTS_SOURCE }}" =~ ^https?:// ]]; then
-          wget -q -O {{ .TEMP_REQUIREMENTS }} {{ .REQUIREMENTS_SOURCE }}
-          REQUIREMENTS_FILE="{{ .TEMP_REQUIREMENTS }}"
-        else
-          REQUIREMENTS_FILE="{{ .REQUIREMENTS_SOURCE }}"
-        fi
-
-        # RUN DAGGER COMMAND
-
         dagger call -m {{ .MODULE }}@{{ .VERSION }} {{ .FUNCTION }} \
-        --playbooks "{{ .PLAYBOOKS }}" \
-        --requirements ${REQUIREMENTS_FILE} \
-        --hosts "{{ .HOSTS }}" \
-        --ssh-user=env:SSH_USER \
-        --ssh-password=env:SSH_PASSWORD \
-        --parameters {{ .PARAMS }} \
-        --progress plain -vv
+          --playbooks "{{ .PLAYBOOKS }}" \
+          --requirements "{{ .REQUIREMENTS_FILE }}" \
+          --hosts "{{ .HOSTS }}" \
+          --ssh-user "{{ .SSH_USER }}" \
+          --ssh-password "{{ .SSH_PASSWORD }}" \
+          --parameters "{{ .PARAMS }}" \
+          --progress plain -vv
+
+  # execute-ansible-play:
+  #   desc: Execute Ansible playbook on remote host using Dagger VM module
+  #   vars:
+  #     TEMP_REQUIREMENTS: /tmp/requirements.yaml
+  #     MODULE: github.com/stuttgart-things/blueprints/vm
+  #     VERSION: v1.34.0
+  #     FUNCTION: execute-ansible
+  #     DEFAULT_REQUIREMENTS_URL: https://raw.githubusercontent.com/stuttgart-things/ansible/refs/heads/main/requirements.yaml
+  #     REQUIREMENTS_SOURCE:
+  #       sh: |
+  #         if gum confirm "Use default requirements file from stuttgart-things/ansible?"; then
+  #           echo "{{ .DEFAULT_REQUIREMENTS_URL }}"
+  #         else
+  #           gum input --prompt "Enter path or URL to requirements.yaml file: "
+  #         fi
+  #     HOSTS:
+  #       sh: |
+  #         gum input --placeholder "Hosts e.g. 10.31.103.58,10.31.103.59"
+  #     PLAYBOOKS:
+  #       sh: |
+  #         gum choose --no-limit "sthings.baseos.setup" "sthings.container.docker" "sthings.baseos.dev" | paste -sd ","
+  #     PARAMS:
+  #       sh: |
+  #         gum input --placeholder "Parameters e.g. manage_filesystem=true,lvm_var_sizing=50%"
+  #   cmds:
+  #     - |
+  #       # CHECK FOR EXISTING ENV VARS
+
+  #       # --- SSH_USER ---
+  #       if [[ -n "${SSH_USER:-}" ]]; then
+  #         if gum confirm --default=true "SSH_USER is set to '${SSH_USER}'. Keep it?"; then
+  #           export SSH_USER
+  #         else
+  #           export SSH_USER="$(gum input --prompt 'Enter SSH_USER: ')"
+  #         fi
+  #       else
+  #         export SSH_USER="$(gum input --prompt 'Enter SSH_USER: ')"
+  #       fi
+
+  #       # --- SSH_PASSWORD ---
+  #       if [[ -n "${SSH_PASSWORD:-}" ]]; then
+  #         if gum confirm --default=true "SSH_PASSWORD is set (hidden). Keep it?"; then
+  #           export SSH_PASSWORD
+  #         else
+  #           export SSH_PASSWORD="$(gum input --password --prompt 'Enter SSH_PASSWORD: ')"
+  #         fi
+  #       else
+  #         export SSH_PASSWORD="$(gum input --password --prompt 'Enter SSH_PASSWORD: ')"
+  #       fi
+
+  #     - |
+  #       # GET REQUIREMENTS FILE
+
+  #       # Download requirements file if it's a URL
+  #       if [[ "{{ .REQUIREMENTS_SOURCE }}" =~ ^https?:// ]]; then
+  #         wget -q -O {{ .TEMP_REQUIREMENTS }} {{ .REQUIREMENTS_SOURCE }}
+  #         REQUIREMENTS_FILE="{{ .TEMP_REQUIREMENTS }}"
+  #       else
+  #         REQUIREMENTS_FILE="{{ .REQUIREMENTS_SOURCE }}"
+  #       fi
+
+  #       # RUN DAGGER COMMAND
+
+  #       dagger call -m {{ .MODULE }}@{{ .VERSION }} {{ .FUNCTION }} \
+  #       --playbooks "{{ .PLAYBOOKS }}" \
+  #       --requirements ${REQUIREMENTS_FILE} \
+  #       --hosts "{{ .HOSTS }}" \
+  #       --ssh-user=env:SSH_USER \
+  #       --ssh-password=env:SSH_PASSWORD \
+  #       --parameters {{ .PARAMS }} \
+  #       --progress plain -vv
