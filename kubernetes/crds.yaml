@@ -1,0 +1,94 @@
+---
+version: 3
+tasks:
+  kubectl-kustomize:
+    desc: Execute kubectl operations with kustomize using Dagger Kubernetes module
+    vars:
+      MODULE: github.com/stuttgart-things/dagger/kubernetes
+      VERSION: v0.57.0
+      OPERATION:
+        sh: |
+          if [[ -n "${OPERATION:-}" ]]; then
+            if gum confirm --default=true "OPERATION is set to '${OPERATION}'. Keep it?"; then
+              echo "${OPERATION}"
+            else
+              gum choose "apply" "delete"
+            fi
+          else
+            gum choose "apply" "delete"
+          fi
+      KUSTOMIZE_SOURCE_CHOICE:
+        sh: |
+          gum choose \
+            "https://github.com/stuttgart-things/helm/infra/crds/cilium" \
+            "https://github.com/stuttgart-things/helm/infra/crds/cert-manager" \
+            "Enter Address"
+      KUSTOMIZE_SOURCE:
+        sh: |
+          if [[ -n "${KUSTOMIZE_SOURCE:-}" ]]; then
+            if gum confirm --default=true "KUSTOMIZE_SOURCE is set to '${KUSTOMIZE_SOURCE}'. Keep it?"; then
+              echo "${KUSTOMIZE_SOURCE}"
+            else
+              choice="{{ .KUSTOMIZE_SOURCE_CHOICE }}"
+              if [[ "$choice" == "Enter Address" ]]; then
+                gum input --prompt "Enter kustomize source URL: " --placeholder "https://github.com/org/repo/path"
+              else
+                echo "$choice"
+              fi
+            fi
+          else
+            choice="{{ .KUSTOMIZE_SOURCE_CHOICE }}"
+            if [[ "$choice" == "Enter Address" ]]; then
+              gum input --prompt "Enter kustomize source URL: " --placeholder "https://github.com/org/repo/path"
+            else
+              echo "$choice"
+            fi
+          fi
+      KUBECONFIG_PATH:
+        sh: |
+          if [[ -n "${KUBECONFIG_PATH:-}" ]]; then
+            if gum confirm --default=true "KUBECONFIG_PATH is set to '${KUBECONFIG_PATH}'. Keep it?"; then
+              echo "${KUBECONFIG_PATH}"
+            else
+              if gum confirm "Use current KUBECONFIG (${KUBECONFIG:-~/.kube/config})?"; then
+                echo "${KUBECONFIG:-~/.kube/config}"
+              else
+                gum file ~/.kube/
+              fi
+            fi
+          else
+            if gum confirm "Use current KUBECONFIG (${KUBECONFIG:-~/.kube/config})?"; then
+              echo "${KUBECONFIG:-~/.kube/config}"
+            else
+              gum file ~/.kube/
+            fi
+          fi
+      KUBECONFIG_FILE:
+        sh: |
+          path="{{ .KUBECONFIG_PATH }}"
+          eval echo "$path"
+    cmds:
+      - |
+        echo "Executing kubectl operation with the following configuration:"
+        echo "  Operation: {{ .OPERATION }}"
+        echo "  Kustomize Source: {{ .KUSTOMIZE_SOURCE }}"
+        echo "  Kubeconfig: {{ .KUBECONFIG_FILE }}"
+        echo ""
+      - |
+        if [[ ! -f "{{ .KUBECONFIG_FILE }}" ]]; then
+          echo "Error: Kubeconfig file not found at {{ .KUBECONFIG_FILE }}"
+          exit 1
+        fi
+      - |
+        if gum confirm "Proceed with kubectl {{ .OPERATION }}?"; then
+          dagger call -m {{ .MODULE }}@{{ .VERSION }} kubectl \
+            --operation {{ .OPERATION }} \
+            --kustomize-source {{ .KUSTOMIZE_SOURCE }} \
+            --kube-config file://{{ .KUBECONFIG_FILE }}
+        else
+          echo "Operation cancelled."
+          exit 0
+        fi
+      - |
+        echo ""
+        echo "✓ kubectl {{ .OPERATION }} completed successfully!"
