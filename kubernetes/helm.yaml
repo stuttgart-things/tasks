@@ -1,20 +1,138 @@
 ---
+version: 3
 
-dagger call -m github.com/stuttgart-things/dagger/kubernetes@v0.57.0 kubectl \
---operation apply  \
---kustomize-source https://github.com/stuttgart-things/helm/infra/crds/cilium  \
-  --kube-config file://config.yaml
-
-
-
-  git::https://github.com/stuttgart-things/helm.git@infra/cilium.yaml.gotmpl
-
-
-dagger call -m github.com/stuttgart-things/dagger/helm@v0.57.0 helmfile-operation \
---helmfile-ref "git::https://github.com/stuttgart-things/helm.git@infra/cilium.yaml.gotmpl" \
---operation apply \
---state-values "config=kind,clusterName=dev,configureLB=false" \
---kube-config file://config.yaml \
---progress plain -vv
-
-dagger call -m github.com/stuttgart-things/dagger/helm@v0.57.0 helmfile-operation --helmfile-ref "git::https://github.com/stuttgart-things/helm.git@cicd/crossplane.yaml.gotmpl" --operation apply --state-values "version=2.1.3" --kube-config file://config.yaml --progress plain -vv
+tasks:
+  helmfile-operation:
+    desc: Execute helmfile operations using Dagger Helm module
+    vars:
+      MODULE: github.com/stuttgart-things/dagger/helm
+      VERSION: v0.57.0
+      OPERATION:
+        sh: |
+          if [[ -n "${OPERATION:-}" ]]; then
+            if gum confirm --default=true "OPERATION is set to '${OPERATION}'. Keep it?"; then
+              echo "${OPERATION}"
+            else
+              gum choose "apply" "destroy"
+            fi
+          else
+            gum choose "apply" "destroy"
+          fi
+      HELMFILE_CHOICE:
+        sh: |
+          gum choose \
+            "Cilium" \
+            "Crossplane" \
+            "Enter Custom Helmfile"
+      HELMFILE_REF:
+        sh: |
+          if [[ -n "${HELMFILE_REF:-}" ]]; then
+            echo "${HELMFILE_REF}"
+          else
+            choice="{{ .HELMFILE_CHOICE }}"
+            case "$choice" in
+              "Cilium")
+                echo "git::https://github.com/stuttgart-things/helm.git@infra/cilium.yaml.gotmpl"
+                ;;
+              "Crossplane")
+                echo "git::https://github.com/stuttgart-things/helm.git@cicd/crossplane.yaml.gotmpl"
+                ;;
+              "Enter Custom Helmfile")
+                gum input --prompt "Enter helmfile reference: " --placeholder "git::https://github.com/org/repo.git@path/file.yaml"
+                ;;
+            esac
+          fi
+      DEFAULT_STATE_VALUES:
+        sh: |
+          choice="{{ .HELMFILE_CHOICE }}"
+          case "$choice" in
+            "Cilium")
+              echo "config=kind,clusterName=dev,configureLB=false"
+              ;;
+            "Crossplane")
+              echo "version=2.1.3"
+              ;;
+            *)
+              echo ""
+              ;;
+          esac
+      STATE_VALUES:
+        sh: |
+          if [[ -n "${STATE_VALUES:-}" ]]; then
+            if gum confirm --default=true "STATE_VALUES is set to '${STATE_VALUES}'. Keep it?"; then
+              echo "${STATE_VALUES}"
+            else
+              default="{{ .DEFAULT_STATE_VALUES }}"
+              if [[ -n "$default" ]]; then
+                if gum confirm "Use default values: $default?"; then
+                  echo "$default"
+                else
+                  gum input --prompt "Enter state values (key=value,key=value): " --value "$default"
+                fi
+              else
+                gum input --prompt "Enter state values (key=value,key=value): " --placeholder "key1=value1,key2=value2"
+              fi
+            fi
+          else
+            default="{{ .DEFAULT_STATE_VALUES }}"
+            if [[ -n "$default" ]]; then
+              if gum confirm "Use default values: $default?"; then
+                echo "$default"
+              else
+                gum input --prompt "Enter state values (key=value,key=value): " --value "$default"
+              fi
+            else
+              gum input --prompt "Enter state values (key=value,key=value): " --placeholder "key1=value1,key2=value2"
+            fi
+          fi
+      KUBECONFIG_PATH:
+        sh: |
+          if [[ -n "${KUBECONFIG_PATH:-}" ]]; then
+            if gum confirm --default=true "KUBECONFIG_PATH is set to '${KUBECONFIG_PATH}'. Keep it?"; then
+              echo "${KUBECONFIG_PATH}"
+            else
+              if gum confirm "Use current KUBECONFIG (${KUBECONFIG:-~/.kube/config})?"; then
+                echo "${KUBECONFIG:-~/.kube/config}"
+              else
+                gum file ~/.kube/
+              fi
+            fi
+          else
+            if gum confirm "Use current KUBECONFIG (${KUBECONFIG:-~/.kube/config})?"; then
+              echo "${KUBECONFIG:-~/.kube/config}"
+            else
+              gum file ~/.kube/
+            fi
+          fi
+      KUBECONFIG_FILE:
+        sh: |
+          path="{{ .KUBECONFIG_PATH }}"
+          eval echo "$path"
+    cmds:
+      - |
+        echo "Executing helmfile operation with the following configuration:"
+        echo "  Operation: {{ .OPERATION }}"
+        echo "  Helmfile: {{ .HELMFILE_REF }}"
+        echo "  State Values: {{ .STATE_VALUES }}"
+        echo "  Kubeconfig: {{ .KUBECONFIG_FILE }}"
+        echo ""
+      - |
+        if [[ ! -f "{{ .KUBECONFIG_FILE }}" ]]; then
+          echo "Error: Kubeconfig file not found at {{ .KUBECONFIG_FILE }}"
+          exit 1
+        fi
+      - |
+        if gum confirm "Proceed with helmfile {{ .OPERATION }}?"; then
+          dagger call -m {{ .MODULE }}@{{ .VERSION }} helmfile-operation \
+            --helmfile-ref "{{ .HELMFILE_REF }}" \
+            --operation {{ .OPERATION }} \
+            --state-values "{{ .STATE_VALUES }}" \
+            --kube-config file://{{ .KUBECONFIG_FILE }} \
+            --progress plain -vv
+        else
+          echo "Operation cancelled."
+          exit 0
+        fi
+      - |
+        echo ""
+        echo "✓ helmfile {{ .OPERATION }} completed successfully!"
