@@ -1,4 +1,3 @@
----
 version: 3
 
 tasks:
@@ -7,11 +6,11 @@ tasks:
     vars:
       MODULE: github.com/stuttgart-things/dagger/kcl
       OCI_SOURCE: ghcr.io/stuttgart-things/kind-cluster:0.1.0
-      OUTPUT_PATH: /tmp/kind.yaml
       DEFAULT_CLUSTER_NAME: dev
-      DEFAULT_API_SERVER_ADDRESS: 192.168.178.175
       DEFAULT_PORT_RANGE_START: 32100
       DEFAULT_PORT_RANGE_COUNT: 2
+      HOST_IP:
+        sh: hostname -I | awk '{print $1}'
       CLUSTER_NAME:
         sh: |
           if [[ -n "${CLUSTER_NAME:-}" ]]; then
@@ -29,10 +28,10 @@ tasks:
             if gum confirm --default=true "API_SERVER_ADDRESS is set to '${API_SERVER_ADDRESS}'. Keep it?"; then
               echo "${API_SERVER_ADDRESS}"
             else
-              gum input --prompt "Enter API server address: " --value "{{ .DEFAULT_API_SERVER_ADDRESS }}"
+              gum input --prompt "Enter API server address: " --value "{{ .HOST_IP }}"
             fi
           else
-            gum input --prompt "Enter API server address: " --value "{{ .DEFAULT_API_SERVER_ADDRESS }}"
+            gum input --prompt "Enter API server address: " --value "{{ .HOST_IP }}"
           fi
       PORT_RANGE_START:
         sh: |
@@ -73,6 +72,9 @@ tasks:
           else
             echo "31643"
           fi
+      CLUSTER_CONFIG_PATH: /tmp/{{ .CLUSTER_NAME }}-cluster.yaml
+      KUBECONFIG_PATH:
+        sh: echo "${HOME}/.kube/kind-{{ .CLUSTER_NAME }}"
       PARAMETERS:
         sh: |
           params="portRangeStart={{ .PORT_RANGE_START }},portRangeCount={{ .PORT_RANGE_COUNT }},clusterName={{ .CLUSTER_NAME }},apiServerAddress={{ .API_SERVER_ADDRESS }}"
@@ -85,23 +87,52 @@ tasks:
         echo "Creating Kind cluster with the following configuration:"
         echo "  Cluster Name: {{ .CLUSTER_NAME }}"
         echo "  API Server Address: {{ .API_SERVER_ADDRESS }}"
+        echo "  API Server Port: {{ .API_SERVER_PORT }}"
         echo "  Port Range: {{ .PORT_RANGE_START }}-$(({{ .PORT_RANGE_START }} + {{ .PORT_RANGE_COUNT }} - 1))"
         if [[ "{{ .ADVANCED_CONFIG }}" == "true" ]]; then
           echo "  Node Image: {{ .NODE_IMAGE }}"
-          echo "  API Server Port: {{ .API_SERVER_PORT }}"
         fi
+        echo "  Cluster Config: {{ .CLUSTER_CONFIG_PATH }}"
+        echo "  Kubeconfig Path: {{ .KUBECONFIG_PATH }}"
         echo ""
       - |
         dagger call -m {{ .MODULE }} run \
           --oci-source={{ .OCI_SOURCE }} \
           --parameters "{{ .PARAMETERS }}" \
           --format-output=false \
-          export --path={{ .OUTPUT_PATH }}
+          export --path={{ .CLUSTER_CONFIG_PATH }}
       - |
         echo ""
-        echo "✓ Kind cluster configuration exported to {{ .OUTPUT_PATH }}"
-        if gum confirm "Apply the cluster configuration now?"; then
-          kind create cluster --config {{ .OUTPUT_PATH }}
+        echo "✓ Kind cluster configuration exported to {{ .CLUSTER_CONFIG_PATH }}"
+        echo ""
+      - |
+        mkdir -p ~/.kube || true
+      - |
+        echo "Creating Kind cluster..."
+        kind create cluster \
+          --config {{ .CLUSTER_CONFIG_PATH }} \
+          --kubeconfig {{ .KUBECONFIG_PATH }}
+      - |
+        echo ""
+        echo "Updating kubeconfig with real IP address..."
+        yq -i '.clusters[0].cluster.server = "https://{{ .API_SERVER_ADDRESS }}:{{ .API_SERVER_PORT }}"' {{ .KUBECONFIG_PATH }}
+      - |
+        echo ""
+        echo "✓ Cluster created successfully!"
+        echo ""
+        echo "To use this cluster, run:"
+        echo "  export KUBECONFIG={{ .KUBECONFIG_PATH }}"
+        echo ""
+        if gum confirm "Export KUBECONFIG and test cluster now?"; then
+          export KUBECONFIG={{ .KUBECONFIG_PATH }}
+          echo ""
+          echo "Testing cluster connection..."
+          kubectl get nodes
+          echo ""
+          echo "Cluster is ready! KUBECONFIG is set for this session."
+          echo "To use in new sessions, run: export KUBECONFIG={{ .KUBECONFIG_PATH }}"
         else
-          echo "You can apply it later with: kind create cluster --config {{ .OUTPUT_PATH }}"
+          echo "You can test the cluster later with:"
+          echo "  export KUBECONFIG={{ .KUBECONFIG_PATH }}"
+          echo "  kubectl get nodes"
         fi
