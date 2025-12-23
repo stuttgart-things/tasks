@@ -139,7 +139,7 @@ tasks:
   release:
     desc: release new version
     cmds:
-      - task: git:pr
+      - task: pr
       - npx semantic-release --dry-run
       - npx semantic-release --debug --no-ci
       - echo released version $(git describe --tags --abbrev=0)
