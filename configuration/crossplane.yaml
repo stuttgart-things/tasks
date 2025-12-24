@@ -1,0 +1,39 @@
+version: 3
+
+tasks:
+  init-crossplane-configuration:
+    desc: Init Crossplane configuration package using Dagger
+    vars:
+      MODULE_SOURCE:
+        sh: gum choose "remote" "local" --header "Choose module source:"
+      VERSION: v0.60.0
+      MODULE_DESTINATION:
+        sh: |
+          find {{ .USER_WORKING_DIR }} \
+            -maxdepth 2 \
+            -mindepth 1 \
+            -type d \
+            -not -path '*/\.*' | \
+          sort | \
+          gum filter \
+            --placeholder="Type to search..." \
+            --height=20 \
+            --header="Select output directory:"
+      MODULE_NAME:
+        sh: |
+          gum input \
+            --prompt "Configuration Module Name: " \
+            --placeholder "e.g. github-runner, cloud-config"
+      MODULE:
+        sh: |
+          SOURCE="{{.MODULE_SOURCE}}"
+          REMOTE="github.com/stuttgart-things/dagger/crossplane@{{.VERSION}}"
+          LOCAL="{{.USER_WORKING_DIR}}/projects/dagger/crossplane"
+          [ "$SOURCE" = "remote" ] && echo "$REMOTE" || echo "$LOCAL"
+
+    cmds:
+      - |
+        dagger call -m "{{ .MODULE }}" init-package \
+          --name "{{ .MODULE_NAME }}" \
+          --progress plain \
+          export --path={{ .MODULE_DESTINATION }}/{{ .MODULE_NAME }}
