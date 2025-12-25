@@ -1,0 +1,52 @@
+---
+version: 3
+
+tasks:
+  gen-file:
+    desc: Generate file w/ k2n
+    vars:
+      USECASE:
+        sh: |
+          gum input --value="crossplane" --prompt="USECASE: "
+
+      EXAMPLE_FILES:
+        sh: |
+          files=()
+
+          while true; do
+              # Select a file using gum (start in user's working directory, include hidden files)
+              selected=$(gum file "{{.USER_WORKING_DIR}}" --all)
+
+              # Add the selected file to the array
+              if [ -n "$selected" ]; then
+                  files+=("$selected")
+              fi
+
+              # Ask if user wants to add another file
+              if gum confirm "Add another file?"; then
+                  continue
+              else
+                  break
+              fi
+          done
+
+          # Join the files array with commas
+          result=$(IFS=,; echo "${files[*]}")
+
+          # Output the result
+          echo "$result"
+
+      VERBOSE:
+        sh: |
+          gum choose "true" "false" --header="VERBOSITY: "
+
+      INSTRUCTION:
+        sh: |
+          gum input --value="create a .." --prompt="INSTRUCTION: "
+    cmds:
+      - |
+        k2n gen \
+        --example-files="{{ .EXAMPLE_FILES }}" \
+        --usecase "{{ .USECASE }}" \
+        --instruction "{{ .INSTRUCTION }}" \
+        --verbose="{{ .VERBOSE }}"
