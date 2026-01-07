@@ -18,7 +18,8 @@ tasks:
           fi
       OUTPUT_PATH:
         sh: |
-          cd ~/gum input --prompt "Enter output path: " --value "/tmp/requirements.yaml"
+          gum input --prompt "Enter output path: " --value "/tmp/requirements.yaml"
+
       TEMP_REQUIREMENTS: /tmp/requirements-input.yaml
     cmds:
       - |
