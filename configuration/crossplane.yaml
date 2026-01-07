@@ -117,3 +117,46 @@ tasks:
           gum style --foreground 9 "❌ Cancelled"
           exit 0
         fi
+
+  create-provider-config:
+    desc: Create Crossplane ProviderConfig for a cluster
+    cmds:
+      - |
+        # Prompt for cluster name
+        CLUSTER_NAME=$(gum input --placeholder "Enter cluster name" --prompt "Cluster Name: ")
+
+        # Prompt for deploy-to-cluster option
+        DEPLOY_TO_CLUSTER=$(gum choose "true" "false" --header "Deploy to cluster?")
+
+        # Prompt for kubeconfig-cluster
+        echo "Select kubeconfig for cluster:"
+        KUBECONFIG_CLUSTER=$(gum file $HOME/.kube)
+
+        # Conditionally prompt for kubeconfig-crossplane-cluster if deploy-to-cluster is true
+        if [ "$DEPLOY_TO_CLUSTER" = "true" ]; then
+          echo "Select kubeconfig for Crossplane cluster:"
+          KUBECONFIG_CROSSPLANE=$(gum file $HOME/.kube)
+          KUBECONFIG_CROSSPLANE_ARG="--kubeconfig-crossplane-cluster file://${KUBECONFIG_CROSSPLANE}"
+        else
+          KUBECONFIG_CROSSPLANE_ARG=""
+        fi
+
+        # Prompt for Crossplane namespace (with default)
+        CROSSPLANE_NS=$(gum input --placeholder "crossplane-system" --prompt "Crossplane Namespace: " --value "crossplane-system")
+
+        # Prompt for providers (with default)
+        PROVIDERS=$(gum input --placeholder "kubernetes,helm" --prompt "Providers: " --value "kubernetes,helm")
+
+        # Prompt for output path
+        OUTPUT_PATH=$(gum input --placeholder "/tmp/output.yaml" --prompt "Output Path: " --value "/tmp/output.yaml")
+
+        # Execute dagger command
+        dagger call -m {{ .BLUEPRINT_CROSSPLANE_MODULE }}{{ .BLUEPRINT_CROSSPLANE_MODULE_VERSION }} add-cluster \
+        --clusterName=${CLUSTER_NAME} \
+        --deploy-to-cluster=${DEPLOY_TO_CLUSTER} \
+        --kubeconfig-cluster file://${KUBECONFIG_CLUSTER} \
+        ${KUBECONFIG_CROSSPLANE_ARG} \
+        --crossplaneNamespace=${CROSSPLANE_NS} \
+        --providers=${PROVIDERS} \
+        export --path=${OUTPUT_PATH} \
+        --progress plain -vv
