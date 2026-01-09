@@ -61,7 +61,7 @@ tasks:
       NODE_IMAGE:
         sh: |
           if [[ "{{ .ADVANCED_CONFIG }}" == "true" ]]; then
-            gum input --prompt "Enter node image: " --value "kindest/node:v1.34.0"
+            gum input --prompt "Enter node image: " --value "kindest/node:v1.35.0"
           else
             echo "kindest/node:v1.34.0"
           fi
