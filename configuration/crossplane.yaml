@@ -2,7 +2,7 @@
 version: 3
 vars:
   BLUEPRINT_CROSSPLANE_MODULE: github.com/stuttgart-things/blueprints/crossplane-configuration
-  BLUEPRINT_CROSSPLANE_MODULE_VERSION: @v1.40.0
+  BLUEPRINT_CROSSPLANE_MODULE_VERSION: "@v1.40.0"
   
 tasks:
   create-new-configuration:
