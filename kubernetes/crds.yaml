@@ -6,7 +6,7 @@ tasks:
     desc: Execute kubectl operations with kustomize using Dagger Kubernetes module
     vars:
       MODULE: github.com/stuttgart-things/dagger/kubernetes
-      VERSION: v0.57.0
+      VERSION: v0.70.0
       OPERATION:
         sh: |
           if [[ -n "${OPERATION:-}" ]]; then
