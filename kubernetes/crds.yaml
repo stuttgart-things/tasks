@@ -23,6 +23,7 @@ tasks:
           gum choose \
             "https://github.com/stuttgart-things/helm/infra/crds/cilium" \
             "https://github.com/stuttgart-things/helm/infra/crds/cert-manager" \
+            "https://github.com/stuttgart-things/helm/cicd/crds/crossplane" \
             "Enter Address"
       KUSTOMIZE_SOURCE:
         sh: |
