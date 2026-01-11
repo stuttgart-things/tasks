@@ -5,13 +5,13 @@ tasks:
     desc: Create new dagger module
     vars:
       MODULE_TYPE:
-        sh: gum choose "Generic dagger module" "Dagger module for dedicated service" --header "MODULE_TYPE: "
+        sh: 'gum choose "Generic dagger module" "Dagger module for dedicated service" --header "MODULE_TYPE: "'
       MODULE_NAME:
-        sh: gum input --prompt "MODULE NAME: " --placeholder "Module name"
+        sh: 'gum input --prompt "MODULE NAME: " --placeholder "Module name"'
       MODULE_PATH:
-        sh: gum input --prompt "MODULE PATH: " --placeholder "Module path" --value="{{ .MODULE_NAME }}"
+        sh: 'gum input --prompt "MODULE PATH: " --placeholder "Module path" --value="{{ .MODULE_NAME }}"'
       SDK:
-        sh: gum choose "go" "python"
+        sh: 'gum choose "go" "python"'
       IS_GENERIC:
         sh: |
           if [ "{{ .MODULE_TYPE }}" = "Generic dagger module" ]; then
@@ -33,7 +33,8 @@ tasks:
       DAGGER_DIR:
         sh: gum input --placeholder "Dagger directory path" --value="./.dagger"
       MODULE_URL:
-        sh: gum input --placeholder "Module URL (e.g. github.com/org/repo/module@version)"
+        sh: 'gum input --placeholder "Module URL (e.g. github.com/stuttgart-things/dagger/go@v0.70.0)"'
     cmds:
-      - cd {{ .DAGGER_DIR }} && dagger install {{ .MODULE_URL }}
-      - cd {{ .DAGGER_DIR }} && dagger develop
+      - |
+        cd {{ .DAGGER_DIR }} && dagger install {{ .MODULE_URL }}
+        cd {{ .DAGGER_DIR }} && dagger develop
