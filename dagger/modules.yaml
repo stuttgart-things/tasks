@@ -5,11 +5,11 @@ tasks:
     desc: Create new dagger module
     vars:
       MODULE_TYPE:
-        sh: gum choose "Generic dagger module" "Dagger module for dedicated service"
+        sh: gum choose "Generic dagger module" "Dagger module for dedicated service" --header "MODULE_TYPE: "
       MODULE_NAME:
-        sh: gum input --placeholder "Module name"
+        sh: gum input --prompt "MODULE NAME: " --placeholder "Module name"
       MODULE_PATH:
-        sh: gum input --placeholder "Module path" --value="{{ .MODULE_NAME }}"
+        sh: gum input --prompt "MODULE PATH: " --placeholder "Module path" --value="{{ .MODULE_NAME }}"
       SDK:
         sh: gum choose "go" "python"
       IS_GENERIC:
