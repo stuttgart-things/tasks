@@ -5,9 +5,11 @@ tasks:
     desc: Create new dagger module
     vars:
       MODULE_TYPE:
-        sh: gum choose "Standardized dagger module" "Dagger module for a dedicated service/repo"
+        sh: gum choose "Generic dagger module" "Dagger module for dedicated service"
       MODULE_NAME:
         sh: gum input --placeholder "Module name"
+      MODULE_PATH:
+        sh: gum input --placeholder "Module path" --value="{{ .MODULE_NAME }}"
       SDK:
         sh: gum choose "go" "python"
       IS_GENERIC:
@@ -18,9 +20,9 @@ tasks:
             echo "false"
           fi
     cmds:
-      - dagger init --sdk={{ .SDK }} --source=./{{ .MODULE_NAME }} --name={{ .MODULE_NAME }}
+      - dagger init --sdk={{ .SDK }} --source=./{{ .MODULE_PATH }} --name={{ .MODULE_NAME }}
       - |
         if [ "{{ .IS_GENERIC }}" = "true" ]; then
           jq '.source = "."' dagger.json > tmp.json && mv tmp.json dagger.json
-          mv dagger.json ./{{ .MODULE_NAME }}/dagger.json
+          mv dagger.json ./{{ .MODULE_PATH }}/dagger.json
         fi
