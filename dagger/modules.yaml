@@ -26,3 +26,14 @@ tasks:
           jq '.source = "."' dagger.json > tmp.json && mv tmp.json dagger.json
           mv dagger.json ./{{ .MODULE_PATH }}/dagger.json
         fi
+
+  install-update-module-dependency:
+    desc: Install or update a dagger module dependency
+    vars:
+      DAGGER_DIR:
+        sh: gum input --placeholder "Dagger directory path" --value="./.dagger"
+      MODULE_URL:
+        sh: gum input --placeholder "Module URL (e.g. github.com/org/repo/module@version)"
+    cmds:
+      - cd {{ .DAGGER_DIR }} && dagger install {{ .MODULE_URL }}
+      - cd {{ .DAGGER_DIR }} && dagger develop
