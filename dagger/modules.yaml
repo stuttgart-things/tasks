@@ -1,14 +1,26 @@
----
 version: 3
+
 tasks:
   create:
     desc: Create new dagger module
-    cmds:
-      - dagger init --sdk={{ .SDK }} --source=./{{ .MODULE_NAME }} --name={{ .MODULE_NAME }}
-      - jq '.source = "."' dagger.json > tmp.json && mv tmp.json dagger.json
-      - mv dagger.json ./{{ .MODULE_NAME }}/dagger.json
     vars:
+      MODULE_TYPE:
+        sh: gum choose "Standardized dagger module" "Dagger module for a dedicated service/repo"
       MODULE_NAME:
         sh: gum input --placeholder "Module name"
       SDK:
         sh: gum choose "go" "python"
+      IS_GENERIC:
+        sh: |
+          if [ "{{ .MODULE_TYPE }}" = "Generic dagger module" ]; then
+            echo "true"
+          else
+            echo "false"
+          fi
+    cmds:
+      - dagger init --sdk={{ .SDK }} --source=./{{ .MODULE_NAME }} --name={{ .MODULE_NAME }}
+      - |
+        if [ "{{ .IS_GENERIC }}" = "true" ]; then
+          jq '.source = "."' dagger.json > tmp.json && mv tmp.json dagger.json
+          mv dagger.json ./{{ .MODULE_NAME }}/dagger.json
+        fi
