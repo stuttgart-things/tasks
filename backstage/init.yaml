@@ -1,0 +1,89 @@
+---
+version: 3
+
+vars:
+  DEFAULT_BACKSTAGE_DIR: "{{.HOME}}/backstage-apps"
+
+tasks:
+  install-yarn:
+    desc: Install yarn globally via npm
+    cmds:
+      - |
+        echo "Installing yarn globally..."
+        npm install --global yarn
+      - |
+        echo "✓ Yarn installed successfully"
+        yarn --version
+
+  scaffold-new-instance:
+    desc: Scaffold a new Backstage application
+    deps:
+      - install-yarn
+    cmds:
+      - |
+        echo "Where do you want to create the Backstage application?"
+        echo "Default: {{ .DEFAULT_BACKSTAGE_DIR }}"
+        echo ""
+      - |
+        TARGET_DIR=$(gum input \
+          --placeholder "Enter directory path (press Enter for default)" \
+          --value "{{ .DEFAULT_BACKSTAGE_DIR }}")
+
+        # Use default if empty
+        if [ -z "$TARGET_DIR" ]; then
+          TARGET_DIR="{{ .DEFAULT_BACKSTAGE_DIR }}"
+        fi
+
+        echo ""
+        echo "Creating Backstage app in: $TARGET_DIR"
+
+        # Create directory if it doesn't exist
+        mkdir -p "$TARGET_DIR"
+
+        # Change to target directory and create app
+        cd "$TARGET_DIR"
+        npx @backstage/create-app
+      - |
+        echo ""
+        echo "✓ Backstage application scaffolded successfully"
+
+  scaffold-new-instance-here:
+    desc: Scaffold a new Backstage application in current directory
+    deps:
+      - install-yarn
+    cmds:
+      - |
+        echo "Creating Backstage application in current directory: $(pwd)"
+        echo ""
+        npx @backstage/create-app
+      - |
+        echo ""
+        echo "✓ Backstage application scaffolded successfully in $(pwd)"
+
+  init:
+    desc: Complete Backstage setup (install yarn + scaffold app)
+    deps:
+      - install-yarn
+    cmds:
+      - task: scaffold-new-instance
+
+  check-prerequisites:
+    desc: Check if required tools are installed
+    cmds:
+      - |
+        echo "Checking prerequisites..."
+        echo ""
+      - |
+        echo "Node.js version:"
+        node --version || echo "❌ Node.js not found"
+      - |
+        echo ""
+        echo "npm version:"
+        npm --version || echo "❌ npm not found"
+      - |
+        echo ""
+        echo "yarn version (if installed):"
+        yarn --version 2>/dev/null || echo "⚠️  yarn not installed yet"
+      - |
+        echo ""
+        echo "✓ Prerequisites check complete"
