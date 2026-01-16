@@ -35,6 +35,13 @@ tasks:
         echo "   export AUTH_GITHUB_CLIENT_ID=<your-client-id>"
         echo "   export AUTH_GITHUB_CLIENT_SECRET=<your-client-secret>"
         echo ""
+        echo "5. For SINGLE USER mode:"
+        echo "   Add your GitHub username to examples/org.yaml"
+        echo ""
+        echo "   For ORGANIZATION mode (additional variables):"
+        echo "   export GITHUB_ORG=your-org-name"
+        echo "   export GITHUB_TOKEN=ghp_xxxx  # with read:org scope"
+        echo ""
         echo "=============================================="
 
   info-fqdn:
@@ -42,17 +49,19 @@ tasks:
     cmds:
       - |
         FRONTEND_URL=$(gum input \
-          --placeholder "Frontend URL (e.g., https://backstage.example.com)" \
+          --placeholder "Frontend URL (e.g., http://host.example.com:3000)" \
           --value "{{ .BACKSTAGE_FRONTEND_URL }}")
 
         BACKEND_URL=$(gum input \
-          --placeholder "Backend URL (e.g., https://backstage-backend.example.com)" \
+          --placeholder "Backend URL (e.g., http://host.example.com:7007)" \
           --value "{{ .BACKSTAGE_BACKEND_URL }}")
 
         echo ""
         echo "=============================================="
         echo "  GitHub OAuth App Setup for Backstage"
         echo "=============================================="
+        echo ""
+        echo "IMPORTANT: Frontend and backend must use different ports!"
         echo ""
         echo "1. Go to GitHub and create an OAuth App:"
         echo "   https://github.com/settings/developers"
@@ -73,25 +82,21 @@ tasks:
         echo ""
         echo "   export AUTH_GITHUB_CLIENT_ID=<your-client-id>"
         echo "   export AUTH_GITHUB_CLIENT_SECRET=<your-client-secret>"
+        echo "   export BACKSTAGE_FRONTEND_URL=$FRONTEND_URL"
+        echo "   export BACKSTAGE_BACKEND_URL=$BACKEND_URL"
         echo ""
-        echo "5. Update app-config.yaml baseUrl values:"
-        echo ""
-        echo "   app:"
-        echo "     baseUrl: $FRONTEND_URL"
-        echo ""
-        echo "   backend:"
-        echo "     baseUrl: $BACKEND_URL"
-        echo "     cors:"
-        echo "       origin: $FRONTEND_URL"
+        echo "5. For ORGANIZATION mode (additional variables):"
+        echo "   export GITHUB_ORG=your-org-name"
+        echo "   export GITHUB_TOKEN=ghp_xxxx  # with read:org scope"
         echo ""
         echo "=============================================="
 
   configure:
-    desc: Apply GitHub auth configuration to a Backstage instance
+    desc: Apply GitHub auth configuration (single user mode)
     cmds:
       - |
         echo "=============================================="
-        echo "  Configure GitHub Auth for Backstage"
+        echo "  Configure GitHub Auth (Single User Mode)"
         echo "=============================================="
         echo ""
       - |
@@ -113,20 +118,18 @@ tasks:
           gum confirm "Do you want to continue anyway?" || exit 0
         fi
 
-        # Step 1: Add GitHub provider to app-config.yaml
-        echo "Step 1/3: Updating app-config.yaml..."
+        # Step 1: Add GitHub provider to app-config.yaml with signIn resolver
+        echo "Step 1/4: Updating app-config.yaml..."
 
-        # Check if github provider already exists under auth.providers
         if grep -A5 "^auth:" "$BACKSTAGE_DIR/app-config.yaml" | grep -q "github:"; then
           echo "  ✓ GitHub provider already exists in app-config.yaml"
         else
-          # Add github provider after guest provider
-          sed -i '/^    guest: {}/a\    github:\n      development:\n        clientId: \${AUTH_GITHUB_CLIENT_ID}\n        clientSecret: \${AUTH_GITHUB_CLIENT_SECRET}' "$BACKSTAGE_DIR/app-config.yaml"
-          echo "  ✓ Added GitHub provider to app-config.yaml"
+          sed -i '/^    guest: {}/a\    github:\n      development:\n        clientId: \${AUTH_GITHUB_CLIENT_ID}\n        clientSecret: \${AUTH_GITHUB_CLIENT_SECRET}\n        signIn:\n          resolvers:\n            - resolver: usernameMatchingUserEntityName' "$BACKSTAGE_DIR/app-config.yaml"
+          echo "  ✓ Added GitHub provider with signIn resolver to app-config.yaml"
         fi
 
         # Step 2: Add GitHub auth module to backend
-        echo "Step 2/3: Updating backend/src/index.ts..."
+        echo "Step 2/4: Updating backend/src/index.ts..."
 
         BACKEND_INDEX="$BACKSTAGE_DIR/packages/backend/src/index.ts"
         if grep -q "auth-backend-module-github-provider" "$BACKEND_INDEX"; then
@@ -136,35 +139,146 @@ tasks:
           echo "  ✓ Added GitHub auth module to backend"
         fi
 
-        # Step 3: Update frontend SignInPage
-        echo "Step 3/3: Updating app/src/App.tsx..."
+        # Step 3: Update frontend SignInPage with githubAuthApiRef
+        echo "Step 3/4: Updating app/src/App.tsx..."
 
         APP_TSX="$BACKSTAGE_DIR/packages/app/src/App.tsx"
-        if grep -q "providers=\[.*'github'.*\]" "$APP_TSX"; then
+
+        if grep -q "githubAuthApiRef" "$APP_TSX"; then
+          echo "  ✓ githubAuthApiRef already imported"
+        else
+          sed -i "/from '@backstage\/core-components';/a import { githubAuthApiRef } from '@backstage/core-plugin-api';" "$APP_TSX"
+          echo "  ✓ Added githubAuthApiRef import"
+        fi
+
+        if grep -q "github-auth-provider" "$APP_TSX"; then
           echo "  ✓ GitHub provider already in SignInPage"
         else
-          sed -i "s/providers=\['guest'\]/providers={['guest', 'github']}/" "$APP_TSX"
-          # Handle array format too
-          sed -i "s/providers={\['guest'\]}/providers={['guest', 'github']}/" "$APP_TSX"
-          echo "  ✓ Added GitHub to SignInPage providers"
+          echo "  ⚠️  Please update SignInPage providers manually in App.tsx"
+          echo "     See README.md for the correct format using githubAuthApiRef"
+        fi
+
+        # Step 4: Remind about user
+        echo "Step 4/4: Checking examples/org.yaml..."
+
+        ORG_YAML="$BACKSTAGE_DIR/examples/org.yaml"
+        if [ -f "$ORG_YAML" ]; then
+          echo "  ℹ️  Remember to add your GitHub username to $ORG_YAML"
         fi
 
         echo ""
         echo "=============================================="
-        echo "  ✓ Configuration complete!"
+        echo "  ✓ Single User Configuration complete!"
         echo "=============================================="
         echo ""
         echo "Next steps:"
-        echo ""
         echo "1. Create GitHub OAuth App (run: task github-auth:info)"
+        echo "2. Set environment variables"
+        echo "3. Add your GitHub username to examples/org.yaml"
+        echo "4. Update App.tsx SignInPage if needed"
+        echo "5. Start Backstage: yarn start"
+
+  configure-org:
+    desc: Apply GitHub auth configuration (organization mode with user sync)
+    cmds:
+      - |
+        echo "=============================================="
+        echo "  Configure GitHub Auth (Organization Mode)"
+        echo "=============================================="
         echo ""
-        echo "2. Set environment variables:"
-        echo "   export AUTH_GITHUB_CLIENT_ID=<your-client-id>"
-        echo "   export AUTH_GITHUB_CLIENT_SECRET=<your-client-secret>"
+      - |
+        BACKSTAGE_DIR=$(gum input \
+          --placeholder "Path to Backstage instance" \
+          --value "$(pwd)")
+
+        if [ ! -f "$BACKSTAGE_DIR/app-config.yaml" ]; then
+          echo "❌ Error: app-config.yaml not found in $BACKSTAGE_DIR"
+          exit 1
+        fi
+
+        echo "Configuring Backstage instance at: $BACKSTAGE_DIR"
         echo ""
-        echo "3. Start Backstage:"
-        echo "   cd $BACKSTAGE_DIR && yarn dev"
+
+        # Step 1: Add GitHub provider with multiple resolvers
+        echo "Step 1/5: Updating app-config.yaml (auth)..."
+
+        if grep -A5 "^auth:" "$BACKSTAGE_DIR/app-config.yaml" | grep -q "github:"; then
+          echo "  ✓ GitHub provider already exists"
+          # Update resolvers if needed
+          if ! grep -q "emailLocalPartMatchingUserEntityName" "$BACKSTAGE_DIR/app-config.yaml"; then
+            echo "  ℹ️  Consider adding fallback resolvers for org mode"
+          fi
+        else
+          sed -i '/^    guest: {}/a\    github:\n      development:\n        clientId: \${AUTH_GITHUB_CLIENT_ID}\n        clientSecret: \${AUTH_GITHUB_CLIENT_SECRET}\n        signIn:\n          resolvers:\n            - resolver: usernameMatchingUserEntityName\n            - resolver: emailLocalPartMatchingUserEntityName\n            - resolver: emailMatchingUserEntityProfileEmail' "$BACKSTAGE_DIR/app-config.yaml"
+          echo "  ✓ Added GitHub provider with org-compatible resolvers"
+        fi
+
+        # Step 2: Add GitHub org provider to catalog
+        echo "Step 2/5: Updating app-config.yaml (catalog)..."
+
+        if grep -q "githubOrg:" "$BACKSTAGE_DIR/app-config.yaml"; then
+          echo "  ✓ GitHub org provider already configured"
+        else
+          # Add after 'rules:' line in catalog section
+          sed -i '/^  rules:/a\  # GitHub organization provider - syncs users and teams\n  providers:\n    githubOrg:\n      id: production\n      githubUrl: https://github.com\n      orgs:\n        - \${GITHUB_ORG}\n      schedule:\n        frequency: { hours: 1 }\n        timeout: { minutes: 10 }' "$BACKSTAGE_DIR/app-config.yaml"
+          echo "  ✓ Added GitHub org provider to catalog"
+        fi
+
+        # Step 3: Add GitHub auth module to backend
+        echo "Step 3/5: Updating backend/src/index.ts (auth)..."
+
+        BACKEND_INDEX="$BACKSTAGE_DIR/packages/backend/src/index.ts"
+        if grep -q "auth-backend-module-github-provider" "$BACKEND_INDEX"; then
+          echo "  ✓ GitHub auth module already added"
+        else
+          sed -i "/auth-backend-module-guest-provider/a backend.add(import('@backstage/plugin-auth-backend-module-github-provider'));" "$BACKEND_INDEX"
+          echo "  ✓ Added GitHub auth module"
+        fi
+
+        # Step 4: Add GitHub org catalog module to backend
+        echo "Step 4/5: Updating backend/src/index.ts (org)..."
+
+        if grep -q "catalog-backend-module-github-org" "$BACKEND_INDEX"; then
+          echo "  ✓ GitHub org catalog module already added"
+        else
+          sed -i "/plugin-catalog-backend-module-scaffolder-entity-model/a // GitHub organization entity provider - syncs users/teams from GitHub org\nbackend.add(import('@backstage/plugin-catalog-backend-module-github-org'));" "$BACKEND_INDEX"
+          echo "  ✓ Added GitHub org catalog module"
+        fi
+
+        # Step 5: Update frontend
+        echo "Step 5/5: Updating app/src/App.tsx..."
+
+        APP_TSX="$BACKSTAGE_DIR/packages/app/src/App.tsx"
+
+        if grep -q "githubAuthApiRef" "$APP_TSX"; then
+          echo "  ✓ githubAuthApiRef already imported"
+        else
+          sed -i "/from '@backstage\/core-components';/a import { githubAuthApiRef } from '@backstage/core-plugin-api';" "$APP_TSX"
+          echo "  ✓ Added githubAuthApiRef import"
+        fi
+
+        if grep -q "github-auth-provider" "$APP_TSX"; then
+          echo "  ✓ GitHub provider already in SignInPage"
+        else
+          echo "  ⚠️  Please update SignInPage providers manually in App.tsx"
+        fi
+
         echo ""
+        echo "=============================================="
+        echo "  ✓ Organization Configuration complete!"
+        echo "=============================================="
+        echo ""
+        echo "IMPORTANT: Install the GitHub org package:"
+        echo "  cd $BACKSTAGE_DIR"
+        echo "  yarn --cwd packages/backend add @backstage/plugin-catalog-backend-module-github-org"
+        echo ""
+        echo "Required environment variables:"
+        echo "  export AUTH_GITHUB_CLIENT_ID=<your-client-id>"
+        echo "  export AUTH_GITHUB_CLIENT_SECRET=<your-client-secret>"
+        echo "  export GITHUB_ORG=<your-org-name>"
+        echo "  export GITHUB_TOKEN=<token-with-read:org-scope>"
+        echo ""
+        echo "Then start Backstage: yarn start"
 
   configure-urls:
     desc: Update Backstage URLs for custom FQDN deployment
@@ -179,24 +293,23 @@ tasks:
           exit 1
         fi
 
+        echo ""
+        echo "IMPORTANT: Frontend and backend must use different ports!"
+        echo ""
+
         FRONTEND_URL=$(gum input \
-          --placeholder "Frontend URL" \
+          --placeholder "Frontend URL (e.g., http://host.example.com:3000)" \
           --value "http://localhost:3000")
 
         BACKEND_URL=$(gum input \
-          --placeholder "Backend URL" \
+          --placeholder "Backend URL (e.g., http://host.example.com:7007)" \
           --value "http://localhost:7007")
 
         echo ""
         echo "Updating URLs in app-config.yaml..."
 
-        # Update app.baseUrl
         sed -i "s|baseUrl: http://localhost:3000|baseUrl: $FRONTEND_URL|g" "$BACKSTAGE_DIR/app-config.yaml"
-
-        # Update backend.baseUrl
         sed -i "s|baseUrl: http://localhost:7007|baseUrl: $BACKEND_URL|g" "$BACKSTAGE_DIR/app-config.yaml"
-
-        # Update cors origin
         sed -i "s|origin: http://localhost:3000|origin: $FRONTEND_URL|g" "$BACKSTAGE_DIR/app-config.yaml"
 
         echo "✓ URLs updated successfully"
@@ -208,6 +321,49 @@ tasks:
         echo ""
         echo "Don't forget to update your GitHub OAuth App callback URL:"
         echo "  $BACKEND_URL/api/auth/github/handler/frame"
+        echo ""
+        echo "And set environment variables:"
+        echo "  export BACKSTAGE_FRONTEND_URL=$FRONTEND_URL"
+        echo "  export BACKSTAGE_BACKEND_URL=$BACKEND_URL"
+
+  add-user:
+    desc: Add a GitHub user to the Backstage catalog (single user mode)
+    cmds:
+      - |
+        BACKSTAGE_DIR=$(gum input \
+          --placeholder "Path to Backstage instance" \
+          --value "$(pwd)")
+
+        ORG_YAML="$BACKSTAGE_DIR/examples/org.yaml"
+        if [ ! -f "$ORG_YAML" ]; then
+          echo "❌ Error: examples/org.yaml not found in $BACKSTAGE_DIR"
+          exit 1
+        fi
+
+        GITHUB_USERNAME=$(gum input \
+          --placeholder "GitHub username (case-sensitive)")
+
+        if [ -z "$GITHUB_USERNAME" ]; then
+          echo "❌ Error: GitHub username is required"
+          exit 1
+        fi
+
+        if grep -q "name: $GITHUB_USERNAME" "$ORG_YAML"; then
+          echo "⚠️  User '$GITHUB_USERNAME' already exists in org.yaml"
+          exit 0
+        fi
+
+        cat >> "$ORG_YAML" << EOF
+---
+apiVersion: backstage.io/v1alpha1
+kind: User
+metadata:
+  name: $GITHUB_USERNAME
+spec:
+  memberOf: [guests]
+EOF
+
+        echo "✓ Added user '$GITHUB_USERNAME' to $ORG_YAML"
 
   verify:
     desc: Verify GitHub auth configuration in a Backstage instance
@@ -222,9 +378,10 @@ tasks:
         echo ""
 
         ERRORS=0
+        WARNINGS=0
 
-        # Check app-config.yaml
-        echo "1. Checking app-config.yaml..."
+        # Check app-config.yaml - auth
+        echo "1. Checking app-config.yaml (auth)..."
         if grep -q "AUTH_GITHUB_CLIENT_ID" "$BACKSTAGE_DIR/app-config.yaml"; then
           echo "   ✓ GitHub provider configured"
         else
@@ -232,8 +389,25 @@ tasks:
           ERRORS=$((ERRORS + 1))
         fi
 
+        if grep -q "usernameMatchingUserEntityName" "$BACKSTAGE_DIR/app-config.yaml"; then
+          echo "   ✓ Sign-in resolver configured"
+        else
+          echo "   ❌ Sign-in resolver NOT configured"
+          ERRORS=$((ERRORS + 1))
+        fi
+
+        # Check for org mode
+        echo "2. Checking app-config.yaml (org mode)..."
+        if grep -q "githubOrg:" "$BACKSTAGE_DIR/app-config.yaml"; then
+          echo "   ✓ GitHub org provider configured (organization mode)"
+          ORG_MODE=true
+        else
+          echo "   ℹ️  GitHub org provider not configured (single user mode)"
+          ORG_MODE=false
+        fi
+
         # Check backend index.ts
-        echo "2. Checking backend/src/index.ts..."
+        echo "3. Checking backend/src/index.ts..."
         if grep -q "auth-backend-module-github-provider" "$BACKSTAGE_DIR/packages/backend/src/index.ts"; then
           echo "   ✓ GitHub auth module added"
         else
@@ -241,38 +415,91 @@ tasks:
           ERRORS=$((ERRORS + 1))
         fi
 
+        if [ "$ORG_MODE" = true ]; then
+          if grep -q "catalog-backend-module-github-org" "$BACKSTAGE_DIR/packages/backend/src/index.ts"; then
+            echo "   ✓ GitHub org catalog module added"
+          else
+            echo "   ❌ GitHub org catalog module NOT added"
+            ERRORS=$((ERRORS + 1))
+          fi
+        fi
+
         # Check App.tsx
-        echo "3. Checking app/src/App.tsx..."
-        if grep -q "'github'" "$BACKSTAGE_DIR/packages/app/src/App.tsx"; then
-          echo "   ✓ GitHub in SignInPage providers"
+        echo "4. Checking app/src/App.tsx..."
+        if grep -q "githubAuthApiRef" "$BACKSTAGE_DIR/packages/app/src/App.tsx"; then
+          echo "   ✓ githubAuthApiRef imported and used"
         else
-          echo "   ❌ GitHub NOT in SignInPage providers"
+          echo "   ❌ githubAuthApiRef NOT found"
           ERRORS=$((ERRORS + 1))
         fi
 
+        # Check for users (only relevant in single user mode)
+        if [ "$ORG_MODE" = false ]; then
+          echo "5. Checking examples/org.yaml for users..."
+          USER_COUNT=$(grep -c "kind: User" "$BACKSTAGE_DIR/examples/org.yaml" 2>/dev/null || echo "0")
+          if [ "$USER_COUNT" -gt 1 ]; then
+            echo "   ✓ Found $USER_COUNT users in org.yaml"
+          else
+            echo "   ⚠️  Only default 'guest' user found - add your GitHub username"
+            WARNINGS=$((WARNINGS + 1))
+          fi
+        else
+          echo "5. Org mode: users will be synced from GitHub"
+        fi
+
         # Check environment variables
-        echo "4. Checking environment variables..."
+        echo "6. Checking environment variables..."
         if [ -n "$AUTH_GITHUB_CLIENT_ID" ]; then
           echo "   ✓ AUTH_GITHUB_CLIENT_ID is set"
         else
           echo "   ⚠️  AUTH_GITHUB_CLIENT_ID is NOT set"
+          WARNINGS=$((WARNINGS + 1))
         fi
         if [ -n "$AUTH_GITHUB_CLIENT_SECRET" ]; then
           echo "   ✓ AUTH_GITHUB_CLIENT_SECRET is set"
         else
           echo "   ⚠️  AUTH_GITHUB_CLIENT_SECRET is NOT set"
+          WARNINGS=$((WARNINGS + 1))
+        fi
+
+        if [ "$ORG_MODE" = true ]; then
+          if [ -n "$GITHUB_ORG" ]; then
+            echo "   ✓ GITHUB_ORG is set: $GITHUB_ORG"
+          else
+            echo "   ⚠️  GITHUB_ORG is NOT set (required for org mode)"
+            WARNINGS=$((WARNINGS + 1))
+          fi
+          if [ -n "$GITHUB_TOKEN" ]; then
+            echo "   ✓ GITHUB_TOKEN is set"
+          else
+            echo "   ⚠️  GITHUB_TOKEN is NOT set (required for org mode)"
+            WARNINGS=$((WARNINGS + 1))
+          fi
         fi
 
         echo ""
-        if [ $ERRORS -eq 0 ]; then
+        if [ $ERRORS -eq 0 ] && [ $WARNINGS -eq 0 ]; then
           echo "✓ All configuration checks passed!"
+        elif [ $ERRORS -eq 0 ]; then
+          echo "⚠️  Configuration OK with $WARNINGS warning(s)"
         else
-          echo "❌ Found $ERRORS configuration issue(s)"
-          echo "   Run 'task github-auth:configure' to fix"
+          echo "❌ Found $ERRORS error(s) and $WARNINGS warning(s)"
+          if [ "$ORG_MODE" = true ]; then
+            echo "   Run 'task github-auth:configure-org' to fix"
+          else
+            echo "   Run 'task github-auth:configure' to fix"
+          fi
         fi
 
   full-setup:
-    desc: Complete GitHub auth setup (configure + show info)
+    desc: Complete GitHub auth setup (single user mode)
     cmds:
       - task: configure
+      - task: add-user
+      - task: info
+
+  full-setup-org:
+    desc: Complete GitHub auth setup (organization mode)
+    cmds:
+      - task: configure-org
       - task: info
