@@ -1,18 +1,21 @@
 version: 3
 
 vars:
-  DEFAULT_BACKSTAGE_DIR: "{{.HOME}}/backstage-apps"
+  DEFAULT_BACKSTAGE_DIR:
+    sh: pwd
 
 tasks:
   install-yarn:
-    desc: Install yarn globally via npm
+    desc: Install yarn globally via npm (only if missing)
     cmds:
       - |
-        echo "Installing yarn globally..."
-        npm install --global yarn
-      - |
-        echo "✓ Yarn installed successfully"
-        yarn --version
+        if command -v yarn >/dev/null 2>&1; then
+          echo "✓ Yarn already installed: $(yarn --version)"
+        else
+          echo "Yarn not found. Installing yarn globally..."
+          npm install --global yarn
+          echo "✓ Yarn installed successfully: $(yarn --version)"
+        fi
 
   init:
     desc: Install yarn + scaffold a new Backstage app into a chosen folder
@@ -27,10 +30,8 @@ tasks:
         TARGET_DIR=$(gum input \
           --placeholder "{{ .DEFAULT_BACKSTAGE_DIR }}")
 
-        # Trim whitespace
         TARGET_DIR="$(echo "$TARGET_DIR" | xargs)"
 
-        # Use default if empty
         if [ -z "$TARGET_DIR" ]; then
           TARGET_DIR="{{ .DEFAULT_BACKSTAGE_DIR }}"
         fi
@@ -38,10 +39,8 @@ tasks:
         echo ""
         echo "Creating Backstage app in: $TARGET_DIR"
         mkdir -p "$TARGET_DIR"
-
         cd "$TARGET_DIR"
 
-        # optional: show where we are, to verify it works
         echo "Running in: $(pwd)"
         echo ""
 
