@@ -2,13 +2,13 @@
 version: 3
 vars:
   PROJECT_NAME:
-    sh: basename "{{.USER_WORKING_DIR}}"
+    sh: basename "{{ .USER_WORKING_DIR }}"
   IMAGE_TAG:
     sh: date +"%y.%m%d.%H%M"
   DAGGER_MODULE: github.com/stuttgart-things/dagger/docker
   IMAGE_CONTEXT: '{{ .SRC | default .USER_WORKING_DIR }}'
   TARGET_IMAGE_REGISTRY: ttl.sh
-  TARGET_IMAGE_NAME: "{{ .PROJECT_NAME}}"
+  TARGET_IMAGE_NAME: "{{ .PROJECT_NAME }}"
   TARGET_IMAGE_REPOSITORY: "stuttgart-things"
   PATH_TO_DOCKERFILE: ./Dockerfile
 

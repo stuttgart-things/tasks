@@ -52,7 +52,7 @@ tasks:
       - git pull
       - git status
       - |
-        git add *
+        git add .
         git status
         if [[ -n $(git status --porcelain) ]]; then
           echo "Review the changes above."
