@@ -39,15 +39,22 @@ tasks:
         --dockerfile "{{ .DOCKERFILE }}" \
         -vv --progress plain
 
-  # image-build:
-  #   desc: Build and push Docker image using default variables
-  #   cmds:
-  #     - |
-  #       dagger call -m {{ . DAGGER_MODULE }} \
-  #       build-and-push \
-  #       --source {{ . DAGGER_SOURCE }} \
-  #       --repository-name {{ . DAGGER_REPOSITORY_NAME }} \
-  #       --registry-url {{ . DAGGER_REGISTRY_URL }} \
-  #       --tag {{ . DAGGER_TAG }} \
-  #       --dockerfile {{ . DAGGER_DOCKERFILE }} \
-  #       -vv --progress plain
+  image-build:
+    desc: Build and push Docker image (non-interactive, vars only)
+    vars:
+      SOURCE: "{{ .IMAGE_CONTEXT }}"
+      DOCKERFILE: "{{ .DOCKERFILE | default .PATH_TO_DOCKERFILE }}"
+      REGISTRY_URL: "{{ .REGISTRY_URL | default .TARGET_IMAGE_REGISTRY }}"
+      IMAGE_REPOSITORY: "{{ .IMAGE_REPOSITORY | default .TARGET_IMAGE_REPOSITORY }}"
+      IMAGE_NAME: "{{ .IMAGE_NAME | default .TARGET_IMAGE_NAME }}"
+      TAG: "{{ .TAG | default .IMAGE_TAG }}"
+    cmds:
+      - |
+        dagger call -m {{ .DAGGER_MODULE }} \
+        build-and-push \
+        --source "{{ .SOURCE }}" \
+        --repository-name "{{ .IMAGE_REPOSITORY }}" \
+        --registry-url "{{ .REGISTRY_URL }}/{{ .IMAGE_REPOSITORY }}/{{ .IMAGE_NAME }}" \
+        --tag "{{ .TAG }}" \
+        --dockerfile "{{ .DOCKERFILE }}" \
+        -vv --progress plain
