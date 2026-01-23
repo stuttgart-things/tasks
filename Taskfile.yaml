@@ -6,6 +6,7 @@ includes:
   lint:
     taskfile: git/linting.yaml
 
+
 tasks:
   default:
     desc: Default task is select & do (work)

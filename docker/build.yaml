@@ -1,0 +1,53 @@
+---
+version: 3
+vars:
+  PROJECT_NAME:
+    sh: basename "{{.USER_WORKING_DIR}}"
+  IMAGE_TAG:
+    sh: date +"%y.%m%d.%H%M"
+  DAGGER_MODULE: github.com/stuttgart-things/dagger/docker
+  IMAGE_CONTEXT: '{{ .SRC | default .USER_WORKING_DIR }}'
+  TARGET_IMAGE_REGISTRY: ttl.sh
+  TARGET_IMAGE_NAME: "{{ .PROJECT_NAME}}"
+  TARGET_IMAGE_REPOSITORY: "stuttgart-things"
+  PATH_TO_DOCKERFILE: ./Dockerfile
+
+tasks:
+  image-build-interactive:
+    desc: Build and push Docker image with interactive prompts
+    vars:
+      SOURCE:
+        sh: 'gum input --placeholder "Source directory" --value "{{ .IMAGE_CONTEXT }}" --header "SOURCE/CONTEXT"'
+      DOCKERFILE:
+        sh: 'gum input --placeholder "Dockerfile path" --value "{{ .PATH_TO_DOCKERFILE }}" --header "DOCKERFILE"'
+      REGISTRY_URL:
+        sh: 'gum input --placeholder "Target Registry URL" --value "{{ .TARGET_IMAGE_REGISTRY }}" --header "REGISTRY_URL"'
+      IMAGE_REPOSITORY:
+        sh: 'gum input --placeholder "Target Registry Repository name" --value "{{ .TARGET_IMAGE_REPOSITORY }}" --header "IMAGE REPOSITORY"'
+      IMAGE_NAME:
+        sh: 'gum input --placeholder "Target image name" --value "{{ .TARGET_IMAGE_NAME }}" --header "TARGET_IMAGE_NAME"'
+      TAG:
+        sh: 'gum input --placeholder "Image tag" --value "{{ .IMAGE_TAG }}" --header "IMAGE TAG"'
+    cmds:
+      - |
+        dagger call -m {{ .DAGGER_MODULE }} \
+        build-and-push \
+        --source "{{ .SOURCE }}" \
+        --repository-name "{{ .IMAGE_REPOSITORY }}" \
+        --registry-url "{{ .REGISTRY_URL }}/{{ .IMAGE_REPOSITORY }}/{{ .IMAGE_NAME }}" \
+        --tag "{{ .TAG }}" \
+        --dockerfile "{{ .DOCKERFILE }}" \
+        -vv --progress plain
+
+  # image-build:
+  #   desc: Build and push Docker image using default variables
+  #   cmds:
+  #     - |
+  #       dagger call -m {{ . DAGGER_MODULE }} \
+  #       build-and-push \
+  #       --source {{ . DAGGER_SOURCE }} \
+  #       --repository-name {{ . DAGGER_REPOSITORY_NAME }} \
+  #       --registry-url {{ . DAGGER_REGISTRY_URL }} \
+  #       --tag {{ . DAGGER_TAG }} \
+  #       --dockerfile {{ . DAGGER_DOCKERFILE }} \
+  #       -vv --progress plain

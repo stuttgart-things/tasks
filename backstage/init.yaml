@@ -1,7 +1,7 @@
 version: 3
 
 vars:
-  DEFAULT_BACKSTAGE_DIR:
+  DEFAULT_PARENT_DIR:
     sh: pwd
 
 tasks:
@@ -18,33 +18,46 @@ tasks:
         fi
 
   init:
-    desc: Install yarn + scaffold a new Backstage app into a chosen folder
+    desc: Install yarn + scaffold a Backstage app (no nested folder)
     deps:
       - install-yarn
     cmds:
       - |
-        echo "Where do you want to create the Backstage application?"
-        echo "Default: {{ .DEFAULT_BACKSTAGE_DIR }}"
+        echo "📁 Choose the parent directory for the Backstage app"
+        echo "Default: {{ .DEFAULT_PARENT_DIR }}"
         echo ""
 
-        TARGET_DIR=$(gum input \
-          --placeholder "{{ .DEFAULT_BACKSTAGE_DIR }}")
+        PARENT_DIR=$(gum input --placeholder "{{ .DEFAULT_PARENT_DIR }}")
+        PARENT_DIR="$(echo "$PARENT_DIR" | xargs)"
 
-        TARGET_DIR="$(echo "$TARGET_DIR" | xargs)"
-
-        if [ -z "$TARGET_DIR" ]; then
-          TARGET_DIR="{{ .DEFAULT_BACKSTAGE_DIR }}"
+        if [ -z "$PARENT_DIR" ]; then
+          PARENT_DIR="{{ .DEFAULT_PARENT_DIR }}"
         fi
 
         echo ""
-        echo "Creating Backstage app in: $TARGET_DIR"
-        mkdir -p "$TARGET_DIR"
-        cd "$TARGET_DIR"
-
-        echo "Running in: $(pwd)"
+        echo "🧩 Enter the Backstage app folder name (will be created inside parent dir)"
         echo ""
 
-        npx @backstage/create-app
+        APP_NAME=$(gum input --placeholder "sthings-backstage")
+        APP_NAME="$(echo "$APP_NAME" | xargs)"
+
+        if [ -z "$APP_NAME" ]; then
+          echo "❌ App name is required"
+          exit 1
+        fi
+
+        TARGET_DIR="$PARENT_DIR/$APP_NAME"
+
+        echo ""
+        echo "Creating Backstage app here:"
+        echo "  $TARGET_DIR"
+        echo ""
+
+        mkdir -p "$PARENT_DIR"
+        cd "$PARENT_DIR"
+
+        # This prevents nesting (create-app will create APP_NAME itself)
+        npx @backstage/create-app --path "$APP_NAME"
 
       - |
         echo ""
