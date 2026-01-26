@@ -1,0 +1,42 @@
+---
+version: 3
+vars:
+  DAGGER_MODULE: github.com/stuttgart-things/dagger/trivy
+
+tasks:
+  scan-image-interactive:
+    desc: Scan container image for vulnerabilities with Trivy
+    cmds:
+      - |
+        # Prompt for image reference with gum
+        IMAGE_REF=$(gum input --placeholder "Enter image reference (e.g., ttl.sh/my-app:latest)" \
+          --prompt "📦 Image to scan: " \
+          --width 80)
+
+        if [ -z "$IMAGE_REF" ]; then
+          echo "❌ Error: No image reference provided"
+          exit 1
+        fi
+
+        echo ""
+        echo "🔍 Scanning image: $IMAGE_REF"
+        echo ""
+
+        # Scan the image with Trivy
+        dagger call -m {{ .DAGGER_MODULE }} scan-image \
+          --image-ref "$IMAGE_REF" \
+          --severity "HIGH,CRITICAL" \
+          --progress plain \
+          export --path=/tmp/trivy-scan-{{ .PROJECT }}.json
+
+        echo ""
+        echo "✅ Scan complete!"
+        echo "📄 Report: /tmp/trivy-scan-{{ .PROJECT }}.json"
+
+        # Show summary if jq is available
+        if command -v jq &> /dev/null; then
+          echo ""
+          echo "📊 Vulnerability Summary:"
+          jq -r '.Results[]? | select(.Vulnerabilities) | "\(.Target): \(.Vulnerabilities | length) vulnerabilities"' \
+            /tmp/trivy-scan-{{ .PROJECT }}.json 2>/dev/null || echo "No vulnerabilities found or report format changed"
+        fi
