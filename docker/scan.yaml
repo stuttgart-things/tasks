@@ -5,7 +5,7 @@ vars:
 
 tasks:
   scan-image-interactive:
-    desc: Scan container image for vulnerabilities with Trivy
+    desc: Scan container image for vulnerabilities with Trivy with interactive prompts
     cmds:
       - |
         # Prompt for image reference with gum
@@ -40,3 +40,23 @@ tasks:
           jq -r '.Results[]? | select(.Vulnerabilities) | "\(.Target): \(.Vulnerabilities | length) vulnerabilities"' \
             /tmp/trivy-scan-{{ .PROJECT }}.json 2>/dev/null || echo "No vulnerabilities found or report format changed"
         fi
+
+  scan-image:
+    desc: Scan container image for vulnerabilities (non-interactive, vars only)
+    vars:
+      IMAGE_REF: '{{ .IMAGE_REF | default "ttl.sh/example:latest" }}'
+      SEVERITY: '{{ .SEVERITY | default .SCAN_SEVERITY }}'
+      TRIVY_VERSION: '{{ .TRIVY_VERSION | default "0.64.1" }}'
+    cmds:
+      - |
+        dagger call -m {{ .TRIVY_MODULE }} \
+        scan-image \
+        --image-ref "{{ .IMAGE_REF }}" \
+        --severity "{{ .SEVERITY }}" \
+        --trivy-version "{{ .TRIVY_VERSION }}" \
+        -vv --progress plain \
+        export --path /tmp/trivy-scan-report.json
+
+        echo ""
+        echo "✅ Scan complete!"
+        echo "📄 Report: /tmp/trivy-scan-report.json"
