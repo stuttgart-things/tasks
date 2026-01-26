@@ -79,7 +79,7 @@ tasks:
         --inventoryType="cluster" \
         --progress plain -vv
 
-create-configure-rke2-cluster:
+  create-configure-rke2-cluster:
     desc: Execute Ansible playbook for RKE2 cluster on remote host using Dagger VM module
     vars:
       MODULE: github.com/stuttgart-things/blueprints/vm
