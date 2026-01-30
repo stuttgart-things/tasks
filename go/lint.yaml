@@ -4,7 +4,7 @@ tasks:
   lint-go:
     desc: Lint Go project (non-interactive, for calling from other taskfiles)
     vars:
-      MODULE: '{{.MODULE | default "github.com/stuttgart-things/dagger/go@v0.42.0"}}'
+      MODULE: '{{.MODULE | default "github.com/stuttgart-things/dagger/go@v0.75.0"}}'
       SRC: '{{.SRC | default "."}}'
       TIMEOUT: '{{.TIMEOUT | default "300s"}}'
     cmds:
@@ -19,7 +19,7 @@ tasks:
     vars:
       MODULE:
         sh: |
-          gum input --placeholder "Dagger module" --value "github.com/stuttgart-things/dagger/go@v0.42.0"
+          gum input --placeholder "Dagger module" --value "github.com/stuttgart-things/dagger/go@v0.75.0"
       SRC:
         sh: |
           gum input --placeholder "Source directory" --value "."
