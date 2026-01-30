@@ -2,7 +2,7 @@
 version: "3"
 vars:
   KUBECONFIG_FOLDER: ~/.kube
-  DEFAULT_K3S_VERSION: "v1.34.2+k3s1"
+  DEFAULT_K3S_VERSION: "v1.35.0+k3s1"
   K3S_UNINSTALL_SCRIPT: /usr/local/bin/k3s-uninstall.sh
 
 tasks:

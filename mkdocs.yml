@@ -1,0 +1,13 @@
+site_name: Stuttgart Things Tasks
+site_description: Collection of reusable Taskfiles for automation
+
+nav:
+  - Home: index.md
+  - Git Tasks: git.md
+  - Kubernetes Tasks: kubernetes.md
+  - Ansible Tasks: ansible.md
+  - Backstage Tasks: backstage.md
+  - SOPS Encryption: sops.md
+
+plugins:
+  - techdocs-core

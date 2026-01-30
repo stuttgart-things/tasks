@@ -1,0 +1,133 @@
+---
+version: 3
+
+vars:
+  MODULE: github.com/stuttgart-things/dagger/sops@v0.75.0
+
+tasks:
+  generate-age-key:
+    desc: Generate a new AGE key pair
+    vars:
+      EXPORT_PATH:
+        sh: |
+          gum input --placeholder "Export path for age key" --value "./age-key.txt"
+    cmds:
+      - |
+        dagger call -m {{ .MODULE }} generate-age-key \
+        export --path {{ .EXPORT_PATH }}
+        echo "AGE key generated at {{ .EXPORT_PATH }}"
+        cat {{ .EXPORT_PATH }}
+
+  generate-sops-config:
+    desc: Generate a .sops.yaml configuration file
+    vars:
+      AGE_PUBLIC_KEY:
+        sh: |
+          # Find AGE public key env vars
+          ENV_VARS=$(env | grep -E '^AGE.*=age1|^SOPS.*=age1' | cut -d'=' -f1 || true)
+          if [ -n "$ENV_VARS" ]; then
+            CHOICE=$(echo -e "$ENV_VARS\nEnter manually" | gum choose --header "SELECT AGE PUBLIC KEY ENV VAR")
+            if [ "$CHOICE" = "Enter manually" ]; then
+              gum input --placeholder "AGE public key (age1...)" --header "AGE PUBLIC KEY"
+            else
+              printenv "$CHOICE"
+            fi
+          else
+            gum input --placeholder "AGE public key (age1...)" --header "AGE PUBLIC KEY (no env vars found)"
+          fi
+      FILE_EXTENSIONS:
+        sh: |
+          gum input --placeholder "File extensions (comma-separated)" --value "yaml,json"
+      EXPORT_PATH:
+        sh: |
+          gum input --placeholder "Export path for .sops.yaml" --value "./.sops.yaml"
+    cmds:
+      - |
+        dagger call -m {{ .MODULE }} generate-sops-config \
+        --age-public-key "{{ .AGE_PUBLIC_KEY }}" \
+        --file-extensions "{{ .FILE_EXTENSIONS }}" \
+        export --path {{ .EXPORT_PATH }}
+        echo "SOPS config generated at {{ .EXPORT_PATH }}"
+        cat {{ .EXPORT_PATH }}
+
+  encrypt:
+    desc: Encrypt a plaintext file using SOPS with an AGE key
+    vars:
+      AGE_KEY:
+        sh: |
+          # Find AGE public key env vars
+          ENV_VARS=$(env | grep -E '^AGE.*=age1|^SOPS.*=age1' | cut -d'=' -f1 || true)
+          if [ -n "$ENV_VARS" ]; then
+            CHOICE=$(echo -e "$ENV_VARS\nEnter manually" | gum choose --header "SELECT AGE PUBLIC KEY ENV VAR")
+            if [ "$CHOICE" = "Enter manually" ]; then
+              gum input --placeholder "AGE public key (age1...)" --header "AGE PUBLIC KEY"
+            else
+              printenv "$CHOICE"
+            fi
+          else
+            gum input --placeholder "AGE public key (age1...)" --header "AGE PUBLIC KEY (no env vars found)"
+          fi
+      PLAINTEXT_FILE:
+        sh: |
+          gum input --placeholder "Path to plaintext file" --value "./secrets.yaml"
+      FILE_EXTENSION:
+        sh: |
+          gum choose "yaml" "json" "env" --header "FILE EXTENSION"
+      EXPORT_PATH:
+        sh: |
+          gum input --placeholder "Export path for encrypted file" --value "./secrets.enc.yaml"
+    cmds:
+      - |
+        export AGE_KEY="{{ .AGE_KEY }}"
+        dagger call -m {{ .MODULE }} encrypt \
+        --age-key "env:AGE_KEY" \
+        --plaintext-file {{ .PLAINTEXT_FILE }} \
+        --file-extension {{ .FILE_EXTENSION }} \
+        export --path {{ .EXPORT_PATH }}
+        echo "Encrypted file saved to {{ .EXPORT_PATH }}"
+
+  decrypt:
+    desc: Decrypt a SOPS-encrypted file using an AGE key
+    vars:
+      AGE_PRIVATE_KEY:
+        sh: |
+          # Find AGE private key env vars
+          ENV_VARS=$(env | grep -E '^AGE.*=AGE-SECRET-KEY|^SOPS.*=AGE-SECRET-KEY' | cut -d'=' -f1 || true)
+          if [ -n "$ENV_VARS" ]; then
+            CHOICE=$(echo -e "$ENV_VARS\nEnter manually" | gum choose --header "SELECT AGE PRIVATE KEY ENV VAR")
+            if [ "$CHOICE" = "Enter manually" ]; then
+              gum input --placeholder "AGE private key (AGE-SECRET-KEY-...)" --header "AGE PRIVATE KEY"
+            else
+              printenv "$CHOICE"
+            fi
+          else
+            gum input --placeholder "AGE private key (AGE-SECRET-KEY-...)" --header "AGE PRIVATE KEY (no env vars found)"
+          fi
+      ENCRYPTED_FILE:
+        sh: |
+          gum input --placeholder "Path to encrypted file" --value "./secrets.enc.yaml"
+      OUTPUT_MODE:
+        sh: |
+          gum choose "stdout" "file" --header "OUTPUT MODE"
+      EXPORT_PATH:
+        sh: |
+          if [ "{{ .OUTPUT_MODE }}" = "file" ]; then
+            gum input --placeholder "Export path for decrypted file" --value "./secrets.dec.yaml"
+          else
+            echo ""
+          fi
+    cmds:
+      - |
+        export AGE_PRIVATE_KEY="{{ .AGE_PRIVATE_KEY }}"
+        if [ "{{ .OUTPUT_MODE }}" = "stdout" ]; then
+          dagger call -m {{ .MODULE }} decrypt \
+          --age-key "env:AGE_PRIVATE_KEY" \
+          --encrypted-file {{ .ENCRYPTED_FILE }} \
+          contents
+        else
+          dagger call -m {{ .MODULE }} decrypt \
+          --age-key "env:AGE_PRIVATE_KEY" \
+          --encrypted-file {{ .ENCRYPTED_FILE }} \
+          export --path {{ .EXPORT_PATH }}
+          echo "Decrypted file saved to {{ .EXPORT_PATH }}"
+        fi

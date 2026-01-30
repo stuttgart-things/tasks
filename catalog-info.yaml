@@ -1,0 +1,39 @@
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: tasks
+  description: Collection of reusable Taskfiles for git workflows, Kubernetes, Ansible, Backstage, and more
+  annotations:
+    github.com/project-slug: stuttgart-things/tasks
+    backstage.io/techdocs-ref: url:https://github.com/stuttgart-things/tasks/tree/main
+    backstage.io/source-location: url:https://github.com/stuttgart-things/tasks
+  tags:
+    - taskfile
+    - automation
+    - git
+    - kubernetes
+    - ansible
+    - backstage
+    - dagger
+    - sops
+  links:
+    - url: https://github.com/stuttgart-things/tasks
+      title: GitHub Repository
+      icon: github
+    - url: https://taskfile.dev
+      title: Taskfile Documentation
+      icon: docs
+spec:
+  type: library
+  lifecycle: production
+  owner: platform-team
+  system: platform-engineering
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: platform-engineering
+  description: Platform Engineering tooling and infrastructure
+spec:
+  owner: platform-team
