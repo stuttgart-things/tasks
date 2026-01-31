@@ -27,3 +27,20 @@ tasks:
           --bin-name {{ .BIN_NAME }} \
           export --path={{ .OUTPUT_PATH }} \
           --progress plain -vv
+
+  release-go:
+    desc: Release Go binary with goreleaser via Dagger
+    vars:
+      DAGGER_MODULE: '{{.DAGGER_MODULE | default "github.com/stuttgart-things/dagger/go"}}'
+      SRC: '{{.SRC | default "."}}'
+      GITHUB_TOKEN_ENV: '{{.GITHUB_TOKEN_ENV | default "GITHUB_TOKEN"}}'
+      CHECK_ONLY: '{{.CHECK_ONLY | default "false"}}'
+      OUTPUT_PATH: '{{.OUTPUT_PATH | default "/tmp/goreleaser.log"}}'
+    cmds:
+      - |
+        dagger call -m {{ .DAGGER_MODULE }} release \
+          --src {{ .SRC }} \
+          --token=env:{{ .GITHUB_TOKEN_ENV }} \
+          --check-only={{ .CHECK_ONLY }} \
+          --progress plain -vv \
+          export --path={{ .OUTPUT_PATH }}
