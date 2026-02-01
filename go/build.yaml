@@ -9,6 +9,7 @@ tasks:
       GO_VERSION: '{{.GO_VERSION | default "1.25.6"}}'
       OS: '{{.OS | default "linux"}}'
       ARCH: '{{.ARCH | default "amd64"}}'
+      LDFLAGS: '{{.LDFLAGS | default ""}}'
       PACKAGE_NAME: '{{.PACKAGE_NAME | default ""}}'
       VERSION: '{{.VERSION | default "0.0.1"}}'
       GO_MAIN_FILE: '{{.GO_MAIN_FILE | default "main.go"}}'
@@ -22,7 +23,7 @@ tasks:
           --os {{ .OS }} \
           --arch {{ .ARCH }} \
           {{if .PACKAGE_NAME}}--package-name {{ .PACKAGE_NAME }} \{{end}}
-          --ldflags "cmd.version={{ .VERSION }}; cmd.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ); cmd.commit=$(git rev-parse --short HEAD 2>/dev/null || echo 'none')" \
+          --ldflags "{{ .LDFLAGS }}" \
           --go-main-file {{ .GO_MAIN_FILE }} \
           --bin-name {{ .BIN_NAME }} \
           export --path={{ .OUTPUT_PATH }} \
