@@ -1,0 +1,24 @@
+---
+version: 3
+vars:
+  PROJECT_NAME:
+    sh: echo ${PWD##*/}
+  LINTING_MODULE: github.com/stuttgart-things/dagger/linting
+  LINTING_MODULE_VERSION: v0.74.0
+
+tasks:
+  run-pre-commit:
+    desc: Run pre-commit hooks via Dagger linting module
+    vars:
+      MODULE: "{{ .LINTING_MODULE }}@{{ .LINTING_MODULE_VERSION }}"
+      SRC: '{{.SRC | default "."}}'
+      CONFIG_PATH: '{{.CONFIG_PATH | default ".pre-commit-config.yaml"}}'
+      EXPORT_PATH: '{{.EXPORT_PATH | default "/tmp/pre-commit-findings.txt"}}'
+    cmds:
+      - |
+        dagger call -m {{ .MODULE }} run-pre-commit \
+          --src {{ .SRC }} \
+          --config-path {{ .CONFIG_PATH }} \
+          export --path={{ .EXPORT_PATH }} \
+          --progress plain
+        cat {{ .EXPORT_PATH }}
