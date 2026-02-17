@@ -1,0 +1,19 @@
+---
+version: 3
+includes:
+  git:
+    taskfile: https://raw.githubusercontent.com/stuttgart-things/tasks/refs/heads/main/git/git.yaml
+  precommit:
+    taskfile: https://raw.githubusercontent.com/stuttgart-things/tasks/refs/heads/main/git/precommit.yaml
+  lint:
+    taskfile: https://raw.githubusercontent.com/stuttgart-things/tasks/refs/heads/main/git/linting.yaml
+
+tasks:
+  commit:
+    desc: Commit and push with Dagger pre-commit validation
+    deps:
+      - precommit:run-pre-commit
+      - lint:lint-repository-files
+      # - lint:analyze-lint-report
+    cmds:
+      - task: git:push

@@ -5,7 +5,7 @@ vars:
   SOURCE_IMAGE: ttl.sh/example:latest
   TARGET_IMAGE: ghcr.io/stuttgart-things/example:latest
   TARGET_USERNAME: ""
-  TARGET_PASSWORD: env:GITHUB_TOKEN
+  TARGET_PASSWORD: env:GITHUB_TOKEN # pragma: allowlist secret
 
 tasks:
   copy-image-interactive:
