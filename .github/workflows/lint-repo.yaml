@@ -19,9 +19,9 @@ jobs:
       runs-on: ubuntu-latest
       environment-name: linting
       app-directory: "./"
-      output-file: "/tmp/lint-findings.txt"
+      output-file: "all-findings.txt"
       continue-error: "false"
       dagger-version: v0.19.7
-      dagger-module-version: v1.29.0
+      dagger-module-version: v1.59.0
       branch-name: ${{ github.head_ref || github.ref_name }}
     secrets: inherit # pragma: allowlist secret

@@ -1,19 +1,110 @@
 ---
 version: 3
-includes:
-  git:
-    taskfile: https://raw.githubusercontent.com/stuttgart-things/tasks/refs/heads/main/git/git.yaml
-  precommit:
-    taskfile: https://raw.githubusercontent.com/stuttgart-things/tasks/refs/heads/main/git/precommit.yaml
-  lint:
-    taskfile: https://raw.githubusercontent.com/stuttgart-things/tasks/refs/heads/main/git/linting.yaml
+
+vars:
+  MODULE: '{{ .MODULE | default "github.com/stuttgart-things/blueprints/repository-linting@v1.62.0" }}'
+  SRC: '{{ .SRC | default "./" }}'
+  REPORT_PATH: '{{ .REPORT_PATH | default "/tmp/all-findings.txt" }}'
 
 tasks:
   commit:
-    desc: Commit and push with Dagger pre-commit validation
-    deps:
-      - precommit:run-pre-commit
-      - lint:lint-repository-files
-      # - lint:analyze-lint-report
+    desc: Lint all, then commit and push
+    vars:
+      # YAML linting
+      ENABLE_YAML: '{{ .ENABLE_YAML | default "true" }}'
+      YAML_CONFIG_PATH: '{{ .YAML_CONFIG_PATH | default ".yamllint" }}'
+      YAML_OUTPUT_FILE: '{{ .YAML_OUTPUT_FILE | default "yamllint-findings.txt" }}'
+      # Markdown linting
+      ENABLE_MARKDOWN: '{{ .ENABLE_MARKDOWN | default "true" }}'
+      MARKDOWN_CONFIG_PATH: '{{ .MARKDOWN_CONFIG_PATH | default ".mdlrc" }}'
+      MARKDOWN_OUTPUT_FILE: '{{ .MARKDOWN_OUTPUT_FILE | default "markdown-findings.txt" }}'
+      # Merged output
+      MERGED_OUTPUT_FILE: '{{ .MERGED_OUTPUT_FILE | default "all-findings.txt" }}'
+      # Pre-commit
+      ENABLE_PRE_COMMIT: '{{ .ENABLE_PRE_COMMIT | default "false" }}'
+      PRE_COMMIT_CONFIG_PATH: '{{ .PRE_COMMIT_CONFIG_PATH | default ".pre-commit-config.yaml" }}'
+      PRE_COMMIT_OUTPUT_FILE: '{{ .PRE_COMMIT_OUTPUT_FILE | default "pre-commit-findings.txt" }}'
+      SKIP_HOOKS: '{{ .SKIP_HOOKS | default "" }}'
+      # Secrets scanning
+      ENABLE_SECRETS: '{{ .ENABLE_SECRETS | default "true" }}'
+      SECRETS_OUTPUT_FILE: '{{ .SECRETS_OUTPUT_FILE | default "secret-findings.json" }}'
+      SECRETS_EXCLUDE_FILES: '{{ .SECRETS_EXCLUDE_FILES | default "dagger.json|.dagger/.*|dist/.*|node_modules/.*" }}'
+      # Fail control - controls when the pipeline fails (default: none)
+      # Supported values:
+      #   - none: never fail (only report findings)
+      #   - any: fail if any linter produces findings
+      #   - yaml: fail only on YAML lint findings
+      #   - markdown: fail only on Markdown lint findings
+      #   - secrets: fail only on secret scan findings
+      #   - precommit: fail only on pre-commit findings
+      #   - error: fail on error-level findings (yamllint errors; any finding from other linters)
+      #   - warning: fail on warning-level or higher findings (yamllint warnings/errors; any finding from other linters)
+      FAIL_ON: '{{ .FAIL_ON | default "none" }}'
+      # Git
+      BRANCH:
+        sh: git rev-parse --abbrev-ref HEAD
+      INTERACTIVE: '{{ .INTERACTIVE | default "false" }}'
+      COMMIT_MSG: '{{ .COMMIT_MSG | default (printf "feat: %s" .BRANCH) }}'
     cmds:
-      - task: git:push
+      - |
+        SKIP_HOOKS_ARG=""
+        if [ -n "{{ .SKIP_HOOKS }}" ]; then
+          for hook in {{ .SKIP_HOOKS }}; do
+            SKIP_HOOKS_ARG="$SKIP_HOOKS_ARG --skip-hooks $hook"
+          done
+        fi
+
+        SECRETS_EXCLUDE_ARG=""
+        if [ -n "{{ .SECRETS_EXCLUDE_FILES }}" ]; then
+          SECRETS_EXCLUDE_ARG="--secrets-exclude-files {{ .SECRETS_EXCLUDE_FILES }}"
+        fi
+
+        dagger call -m {{ .MODULE }} \
+        validate-multiple-technologies \
+        --src {{ .SRC }} \
+        --enable-yaml={{ .ENABLE_YAML }} \
+        --yaml-config-path {{ .YAML_CONFIG_PATH }} \
+        --yaml-output-file {{ .YAML_OUTPUT_FILE }} \
+        --enable-markdown={{ .ENABLE_MARKDOWN }} \
+        --markdown-config-path {{ .MARKDOWN_CONFIG_PATH }} \
+        --markdown-output-file {{ .MARKDOWN_OUTPUT_FILE }} \
+        --merged-output-file {{ .MERGED_OUTPUT_FILE }} \
+        --enable-pre-commit={{ .ENABLE_PRE_COMMIT }} \
+        --pre-commit-config-path {{ .PRE_COMMIT_CONFIG_PATH }} \
+        --pre-commit-output-file {{ .PRE_COMMIT_OUTPUT_FILE }} \
+        $SKIP_HOOKS_ARG \
+        --enable-secrets={{ .ENABLE_SECRETS }} \
+        --secrets-output-file {{ .SECRETS_OUTPUT_FILE }} \
+        $SECRETS_EXCLUDE_ARG \
+        --fail-on={{ .FAIL_ON }} \
+        export --path {{ .MERGED_OUTPUT_FILE }}
+
+        bat {{ .MERGED_OUTPUT_FILE }} -P 2>/dev/null || cat {{ .MERGED_OUTPUT_FILE }}
+
+      - git branch --set-upstream-to=origin/{{ .BRANCH }}
+      - git pull
+      - git status
+      - |
+        git add .
+        git status
+        if [[ -n $(git status --porcelain) ]]; then
+          if [ "{{ .INTERACTIVE }}" == "true" ]; then
+            echo "Review the changes above."
+            gum confirm "Do you want to commit these changes?" || exit 0
+
+            echo "ENTER COMMIT MESSAGE"
+            COMMIT_MSG=$(gum choose "CUSTOM MESSAGE" "feat: {{ .BRANCH }}" "fix: {{ .BRANCH }}" "BREAKING CHANGE: {{ .BRANCH }}")
+
+            if [ "$COMMIT_MSG" == "CUSTOM MESSAGE" ]; then
+              CHANGED_FILES=$(git status --short | awk '{print $2}' | tr '\n' ' ')
+              COMMIT_MSG=$(gum input --placeholder "Commit message" --value "Changed: $CHANGED_FILES")
+            fi
+          else
+            COMMIT_MSG="{{ .COMMIT_MSG }}"
+          fi
+
+          git commit --allow-empty -a -m "$COMMIT_MSG"
+        else
+          echo "No changes to commit."
+        fi
+      - git push origin -u {{ .BRANCH }}
