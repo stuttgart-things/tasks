@@ -2,10 +2,10 @@
 version: 3
 
 vars:
-  DAGGER_RELEASE_MODULE: '{{ .DAGGER_RELEASE_MODULE | default "github.com/stuttgart-things/dagger/release@v0.82.0" }}'
-  DAGGER_GO_MODULE: '{{ .DAGGER_GO_MODULE | default "github.com/stuttgart-things/dagger/go@v0.82.0" }}'
-  DAGGER_CRANE_MODULE: '{{ .DAGGER_CRANE_MODULE | default "github.com/stuttgart-things/dagger/crane@v0.82.0" }}'
-  DAGGER_KCL_MODULE: '{{ .DAGGER_KCL_MODULE | default "github.com/stuttgart-things/dagger/kcl@v0.82.0" }}'
+  DAGGER_RELEASE_MODULE: '{{ .DAGGER_RELEASE_MODULE | default "github.com/stuttgart-things/dagger/release@v0.82.1" }}'
+  DAGGER_GO_MODULE: '{{ .DAGGER_GO_MODULE | default "github.com/stuttgart-things/dagger/go@v0.82.1" }}'
+  DAGGER_CRANE_MODULE: '{{ .DAGGER_CRANE_MODULE | default "github.com/stuttgart-things/dagger/crane@v0.82.1" }}'
+  DAGGER_KCL_MODULE: '{{ .DAGGER_KCL_MODULE | default "github.com/stuttgart-things/dagger/kcl@v0.82.1" }}'
   GITHUB_TOKEN_ENV: '{{ .GITHUB_TOKEN_ENV | default "GITHUB_TOKEN" }}'
   SRC: '{{ .SRC | default "." }}'
   RELEASER_VERSION: '{{ .RELEASER_VERSION | default "v2.13.3" }}'
