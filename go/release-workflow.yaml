@@ -16,6 +16,8 @@ vars:
   KCL_PROFILE_FILE: '{{ .KCL_PROFILE_FILE | default "" }}'
   KUSTOMIZE_OCI_REPO: '{{ .KUSTOMIZE_OCI_REPO | default "" }}'
   GORELEASER_LOG_PATH: '{{ .GORELEASER_LOG_PATH | default "/tmp/goreleaser.log" }}'
+  KUSTOMIZE_BASE_EXPORT_PATH: '{{ .KUSTOMIZE_BASE_EXPORT_PATH | default "/tmp/kustomize-base" }}'
+  OVERLAY_PATH: '{{ .OVERLAY_PATH | default "" }}'
   VERSION: '{{ .VERSION | default "" }}'
 
 tasks:
@@ -94,6 +96,40 @@ tasks:
         vars:
           VERSION:
             sh: cat /tmp/.release-version
+
+  deploy-kustomize-base:
+    desc: Pull kustomize base from OCI and apply to cluster
+    cmds:
+      - |
+        if [ -z "{{ .VERSION }}" ]; then
+          echo "VERSION is required. Usage: task release:deploy-kustomize-base VERSION=v1.0.0"
+          exit 1
+        fi
+
+        echo "Pulling kustomize base..."
+        echo "Source: {{ .KUSTOMIZE_OCI_REPO }}:{{ .VERSION }}"
+        echo "Target: {{ .KUSTOMIZE_BASE_EXPORT_PATH }}"
+        echo ""
+
+        rm -rf "{{ .KUSTOMIZE_BASE_EXPORT_PATH }}"
+        mkdir -p "{{ .KUSTOMIZE_BASE_EXPORT_PATH }}"
+
+        oras pull "{{ .KUSTOMIZE_OCI_REPO }}:{{ .VERSION }}" \
+          -o "{{ .KUSTOMIZE_BASE_EXPORT_PATH }}"
+
+        echo "Kustomize base pulled successfully!"
+        ls -la "{{ .KUSTOMIZE_BASE_EXPORT_PATH }}/"
+      - |
+        APPLY_PATH="{{ .KUSTOMIZE_BASE_EXPORT_PATH }}"
+        if [ -n "{{ .OVERLAY_PATH }}" ]; then
+          APPLY_PATH="{{ .OVERLAY_PATH }}"
+        fi
+
+        echo ""
+        echo "Applying: ${APPLY_PATH}"
+        kubectl apply -k "${APPLY_PATH}"
+        echo ""
+        echo "Applied successfully!"
 
   release-github:
     desc: Full release pipeline (non-interactive, for CI)
