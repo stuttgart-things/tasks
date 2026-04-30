@@ -74,3 +74,32 @@ tasks:
           --ssh-password "{{ .SSH_PASSWORD }}" \
           --parameters "{{ .PARAMS }}" \
           --progress plain -vv
+
+  execute-ansible-minimal:
+    desc: Execute Ansible playbook on remote host without src/inventory (env-bound SSH creds, optional requirements file)
+    vars:
+      MODULE: github.com/stuttgart-things/blueprints/vm
+      VERSION: v2.0.0
+      FUNCTION: execute-ansible
+      HOSTS:
+        sh: |
+          gum input --placeholder "Hosts e.g. 10.31.103.58,10.31.103.59"
+      PLAYBOOKS:
+        sh: |
+          gum choose --no-limit "sthings.baseos.setup" "sthings.container.docker" "sthings.baseos.dev" | paste -sd ","
+      REQUIREMENTS_FILE:
+        sh: |
+          if gum confirm "Provide a requirements file?"; then
+            gum input --prompt "Path to requirements.yaml: " --value "/home/sthings/projects/blueprints/vm/ansible.go"
+          else
+            echo ""
+          fi
+    cmds:
+      - |
+        dagger call -m {{ .MODULE }}@{{ .VERSION }} {{ .FUNCTION }} \
+          --playbooks "{{ .PLAYBOOKS }}" \
+          --hosts "{{ .HOSTS }}" \
+          {{ if .REQUIREMENTS_FILE }}--requirements "{{ .REQUIREMENTS_FILE }}" \
+          {{ end }}--ssh-user=env:SSH_USER \
+          --ssh-password=env:SSH_PASSWORD \
+          --progress plain -vv
