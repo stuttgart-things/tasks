@@ -100,7 +100,7 @@ task k8sMicroservice:commit ENABLE_MARKDOWN=false
 Exclude files from secrets scanning (regex pattern with `|` separator):
 
 ```bash
-task k8sMicroservice:commit SECRETS_EXCLUDE_FILES="node_modules/.*|dist/.*|.*\.gen\.go"
+task k8sMicroservice:commit SECRETS_EXCLUDE_FILES="node_modules/.*|dist/.*|.*\.gen\.go" #pragma: allowlist secret
 ```
 
 Fail on specific findings:
