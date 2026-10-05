@@ -52,7 +52,9 @@ tasks:
           gum input --prompt "Session name: " --value "$DEFAULT" --placeholder "my-session"
       WORKDIR:
         sh: |
-          DEFAULT="$(pwd)"
+          # The directory task was CALLED from: under `task -g` (the global
+          # Taskfile) $(pwd) is $HOME, so every session started there.
+          DEFAULT="{{ .USER_WORKING_DIR }}"
           gum input --prompt "Working directory: " --value "$DEFAULT"
     cmds:
       - |
