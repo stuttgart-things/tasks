@@ -138,7 +138,7 @@ tasks:
           if [[ -z "{{ .SESSIONS }}" ]]; then
             echo ""
           else
-            echo "{{ .SESSIONS }}" | gum choose --no-limit --header "Sessions to kill:"
+            echo "{{ .SESSIONS }}" | gum filter --no-limit --header "Sessions to kill (Tab = several):" --placeholder "type to filter…"
           fi
     cmds:
       - |
