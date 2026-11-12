@@ -1,0 +1,140 @@
+---
+# Open pull requests of the current repo -- list them with their CI and merge
+# state, then merge / close several at once (gum + gh). Meant for the global
+# Taskfile (included remotely as `pr`), works from any git repo:
+#
+#   task -g pr:manage      # pick PRs (space = select), then merge / close / checks / browser
+#   task -g pr:list        # just the status list, non-interactive
+#
+# Each PR row shows:
+#   CI     🟢 all checks green   🔴 a check failed   🟡 checks running   ⚪ no checks
+#   merge  ✅ ready  🔒 blocked (reviews/rules)  ⏫ behind base  ⚠️ unstable
+#          ⛔ conflict  📝 draft  ❔ unknown (GitHub still computing)
+#   review 👍 approved  👎 changes requested  👀 review required
+#
+# Runs in the directory task was called from (USER_WORKING_DIR), so it also
+# works under `task -g`. Needs: gh (logged in), gum, jq.
+version: 3
+
+env:
+  PR_FIELDS: number,title,author,headRefName,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup
+  # One line per PR: "<ci> #<nr>  <merge>  <review>  <title> · <author> · <branch>"
+  PR_ROWS_JQ: |
+    def ci:
+      (.statusCheckRollup // []) as $c
+      | if ($c | length) == 0 then "⚪"
+        elif any($c[]; (.conclusion // .state // "") | test("FAILURE|ERROR|CANCELLED|TIMED_OUT|ACTION_REQUIRED|STARTUP_FAILURE")) then "🔴"
+        elif any($c[]; ((.status // "COMPLETED") != "COMPLETED") or ((.state // "") | test("PENDING|EXPECTED"))) then "🟡"
+        else "🟢" end;
+    def merge:
+      if .isDraft then "📝 draft   "
+      elif .mergeable == "CONFLICTING" then "⛔ conflict"
+      else ({"CLEAN": "✅ ready   ", "HAS_HOOKS": "✅ ready   ", "BLOCKED": "🔒 blocked ",
+             "BEHIND": "⏫ behind  ", "UNSTABLE": "⚠️ unstable", "DIRTY": "⛔ conflict"}[.mergeStateStatus]
+            // "❔ unknown ") end;
+    def review:
+      {"APPROVED": "👍", "CHANGES_REQUESTED": "👎", "REVIEW_REQUIRED": "👀"}[.reviewDecision // ""] // "  ";
+    def pad($n): tostring | . + (" " * ([$n - length, 0] | max));
+    def cut($n): if length > $n then .[0:$n - 1] + "…" else . end;
+    .[] | "\(ci) #\(.number | pad(5)) \(merge)  \(review)  \(.title | cut(70)) · \(.author.login | sub("^app/"; "")) · \(.headRefName)"
+
+tasks:
+  list:
+    desc: "pr: open pull requests of the current repo with CI (🟢/🔴/🟡) and merge state"
+    aliases: [ls]
+    dir: '{{.USER_WORKING_DIR}}'
+    silent: true
+    cmds:
+      - |
+        git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+          || { echo "pr: not inside a git repo ({{.USER_WORKING_DIR}})" >&2; exit 1; }
+        repo=$(gh repo view --json nameWithOwner -q .nameWithOwner) || exit 1
+        rows=$(gh pr list --state open --limit 100 --json "$PR_FIELDS" | jq -r "$PR_ROWS_JQ") || exit 1
+        gum style --bold --foreground 212 "open PRs of $repo"
+        if [ -z "$rows" ]; then echo "  (none)"; else printf '%s\n' "$rows"; fi
+
+  manage:
+    desc: "pr: pick open PRs of the current repo (gum, multi-select) and merge / auto-merge / close them; shows CI + merge state"
+    aliases: [m]
+    dir: '{{.USER_WORKING_DIR}}'
+    interactive: true
+    silent: true
+    cmds:
+      - |
+        git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+          || { gum style --foreground 196 "pr: not inside a git repo ({{.USER_WORKING_DIR}})"; exit 1; }
+        command -v gum >/dev/null || { echo "pr: gum is not installed" >&2; exit 1; }
+        repo=$(gh repo view --json nameWithOwner -q .nameWithOwner) || exit 1
+
+        while :; do
+          json=$(gum spin --show-stdout --title "loading open PRs of $repo …" -- \
+                   gh pr list --state open --limit 100 --json "$PR_FIELDS") || exit 1
+          rows=$(jq -r "$PR_ROWS_JQ" <<<"$json")
+          if [ -z "$rows" ]; then
+            gum style --foreground 82 "no open PRs in $repo 🎉"
+            exit 0
+          fi
+
+          sel=$(printf '%s\n' "$rows" | gum choose --no-limit --height 20 \
+                  --header "$repo -- space/x = select, ctrl+a = all, enter = continue, esc = quit") || exit 0
+          [ -n "$sel" ] || exit 0
+          nums=$(sed -E 's/^[^#]*#([0-9]+).*/\1/' <<<"$sel")
+          count=$(wc -l <<<"$sel" | tr -d ' ')
+
+          echo
+          printf '%s\n' "$sel"
+          echo
+          action=$(gum choose --header "$count PR(s) selected -- what now?" \
+                     "merge" "auto-merge (once checks pass)" "close" "show checks" "open in browser" "back") || continue
+
+          case "$action" in
+            merge|auto-merge*)
+              method=$(gum choose --header "merge method" "squash" "merge" "rebase") || continue
+              flags="--$method"
+              if gum confirm "delete the branch(es) after merging?"; then flags="$flags --delete-branch"; fi
+              case "$action" in auto-merge*) flags="$flags --auto" ;; esac
+
+              # Warn about everything that is not 🟢 + ✅ (auto-merge waits for the checks anyway)
+              notgreen=$(grep -v '^🟢 #[0-9 ]*✅' <<<"$sel" || true)
+              if [ -n "$notgreen" ] && [ "$action" = "merge" ]; then
+                gum style --foreground 214 "not green / not ready:" "$notgreen"
+                gum confirm --default=false "merge these anyway? (GitHub may still refuse)" || continue
+              fi
+              gum confirm "gh pr merge $flags on $count PR(s)?" || continue
+              for n in $nums; do
+                if gh pr merge "$n" $flags; then
+                  gum style --foreground 82 "✔ #$n"
+                else
+                  gum style --foreground 196 "✘ #$n"
+                fi
+              done
+              ;;
+            close)
+              comment=$(gum input --placeholder "optional close comment (enter = none)") || continue
+              flags=""
+              if gum confirm --default=false "also delete the branch(es)?"; then flags="--delete-branch"; fi
+              gum confirm "close $count PR(s)?" || continue
+              for n in $nums; do
+                if [ -n "$comment" ]; then
+                  gh pr close "$n" $flags --comment "$comment"
+                else
+                  gh pr close "$n" $flags
+                fi && gum style --foreground 82 "✔ #$n closed" || gum style --foreground 196 "✘ #$n"
+              done
+              ;;
+            "show checks")
+              for n in $nums; do
+                gum style --bold --foreground 212 "#$n"
+                gh pr checks "$n" || true
+                echo
+              done
+              ;;
+            "open in browser")
+              for n in $nums; do gh pr view "$n" --web; done
+              ;;
+            *) continue ;;
+          esac
+
+          echo
+          gum confirm "back to the PR list?" || exit 0
+        done

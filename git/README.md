@@ -234,6 +234,38 @@ task --taskfile git/sops.yaml decrypt
 
 ---
 
+## pr.yaml
+
+Open pull requests of the current repo: list them with CI and merge state, then merge / close several at once (`gh` + `gum`). Runs in the directory `task` was called from, so it works from the global Taskfile in any repo.
+
+| Task | What it does |
+|------|--------------|
+| `list` (`ls`) | Status list of all open PRs (non-interactive) |
+| `manage` (`m`) | Multi-select PRs (space = select, ctrl+a = all), then **merge**, **auto-merge** (once checks pass), **close**, **show checks** or **open in browser**; loops back to the refreshed list |
+
+Each row: `<ci> #<nr> <merge> <review> <title> · <author> · <branch>`
+
+- **CI**: 🟢 all checks green · 🔴 a check failed · 🟡 running · ⚪ no checks
+- **merge**: ✅ ready · 🔒 blocked · ⏫ behind · ⚠️ unstable · ⛔ conflict · 📝 draft · ❔ unknown (GitHub still computing)
+- **review**: 👍 approved · 👎 changes requested · 👀 review required
+
+`merge` asks for the method (squash / merge / rebase) and whether to delete the branches, and warns before merging anything that is not 🟢 + ✅.
+
+```bash
+# global Taskfile (~/Taskfile.yml)
+includes:
+  pr:
+    taskfile: https://raw.githubusercontent.com/stuttgart-things/tasks/refs/heads/main/git/pr.yaml
+
+task -g pr:manage
+task -g pr:list
+
+# local
+task --taskfile git/pr.yaml manage
+```
+
+---
+
 ## Requirements
 
 - [Task](https://taskfile.dev/) - Task runner
