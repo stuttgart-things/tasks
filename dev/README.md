@@ -22,6 +22,7 @@ Interactive tmux session manager built on `gum`. Run with `task --taskfile tmux.
 | `tmux-kill` | `tk` | Multi-select sessions to kill (with confirmation). |
 | `tmux-list` | `tl` | Show all running sessions. |
 | `tmux-project` | `tp` | One session per repo — pick a directory under `$PROJECTS_ROOT` (default `$HOME/code/stuttgart-things`) and attach/create a session named after it. |
+| `tmux-vscode` | `tv` | Write `.vscode/tasks.json` in the current directory: one VS Code terminal tab (name, icon, color) per tmux session, opened on folder open. See below. |
 
 #### Presets (`tmux-create`)
 
@@ -30,6 +31,16 @@ Interactive tmux session manager built on `gum`. Run with `task --taskfile tmux.
 - **homelab** — windows: `main`, `proxmox`, `vault`, `logs`
 - **custom** — single empty window
 
+#### VS Code tabs (`tmux-vscode`)
+
+VS Code Remote-SSH only brings terminal tabs back if the VS Code server is still running. After a VS Code update, a reboot or a timeout, the window reloads and the tabs are gone, even though the tmux sessions are still running. `tmux-vscode` makes the tabs declarative:
+
+- Pick sessions (running ones + ones already in the file are listed; `+ neue Session…` adds names that don't exist yet), then pick a color for each.
+- Each session becomes a task `tmux new-session -A -s <name>` with `runOn: folderOpen`, a dedicated panel and a `terminal-tmux` icon. A group task `tmux: alle Tabs` opens all of them by hand.
+- Generated entries are marked with `"detail": "tmux:<name>"`. Other tasks in `tasks.json` are kept. Re-run it to change colors or to remove tabs (deselect them).
+- One-time setup: set `"task.allowAutomaticTasks": "on"` in the user/remote settings, or click *Allow* when VS Code asks.
+- Run claude, k9s and similar tools *inside* the tmux session, not directly in the tab. Only then do they survive a reload.
+
 #### Examples
 
 ```bash
@@ -37,6 +48,7 @@ Interactive tmux session manager built on `gum`. Run with `task --taskfile tmux.
 task --taskfile tmux.yaml t          # smart entry
 task --taskfile tmux.yaml tc         # create new session
 task --taskfile tmux.yaml tp         # jump to a project session
+task -t /home/sthings/projects/tasks/dev/tmux.yaml tv   # in the workspace root: VS Code tabs
 
 # or from anywhere
 task -t /home/sthings/projects/tasks/dev/tmux.yaml ta
