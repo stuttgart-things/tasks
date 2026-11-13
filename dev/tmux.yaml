@@ -203,3 +203,107 @@ tasks:
           tmux new-session -d -s "{{ .SESSION_NAME }}" -c "$WORKDIR"
         fi
         tmux attach -t "{{ .SESSION_NAME }}"
+  # ============================================================================
+  # VS Code: terminal tabs (name + color) that re-attach tmux sessions
+  # ============================================================================
+  # Writes one task per session into <cwd>/.vscode/tasks.json. Each task runs
+  # `tmux new-session -A -s <name>` in a dedicated terminal tab with icon and
+  # color, and starts on folderOpen. So when VS Code Remote-SSH reloads instead
+  # of reconnecting, the tabs come back on their own, attached to the still
+  # running sessions (claude, k9s, ... must run inside tmux, not in the tab).
+  #
+  # Generated entries carry `"detail": "tmux:<name>"`; other tasks in the file
+  # are kept. Re-run to add/remove sessions (deselect = remove) or change colors.
+  # Needs `"task.allowAutomaticTasks": "on"` in the user/remote settings (or
+  # answer "Allow" once when VS Code asks).
+
+  tmux-vscode:
+    desc: Write .vscode/tasks.json -- one colored VS Code terminal tab per tmux session
+    aliases: [tv]
+    silent: true
+    preconditions:
+      - sh: command -v jq && command -v gum && command -v tmux
+        msg: "braucht jq, gum, tmux"
+    cmds:
+      - |
+        set -euo pipefail
+        dir="{{ .USER_WORKING_DIR }}"
+        file="$dir/.vscode/tasks.json"
+
+        if [[ -f "$file" ]]; then
+          if ! existing=$(jq -c . "$file" 2>/dev/null); then
+            gum style --foreground 196 "$file ist kein reines JSON (Kommentare / trailing commas?) -- bitte erst bereinigen."
+            exit 1
+          fi
+        else
+          existing='{"version":"2.0.0","tasks":[]}'
+        fi
+
+        configured=$(jq -r '.tasks[]? | (.detail // "") | select(startswith("tmux:")) | ltrimstr("tmux:")' <<<"$existing")
+        running=$(tmux ls -F '#S' 2>/dev/null || true)
+        NEW="+ neue Session…"
+        choices=$( { printf '%s\n' "$configured" "$running" | sed '/^$/d' | sort -u; echo "$NEW"; } )
+
+        mapfile -t picked < <(gum choose --no-limit \
+          --header "Tabs für $dir (Space = an/aus, vorhandene sind markiert):" \
+          --selected "$(paste -sd, <<<"$configured")" <<<"$choices")
+
+        sessions=()
+        for s in "${picked[@]}"; do
+          if [[ "$s" == "$NEW" ]]; then
+            while n=$(gum input --prompt "Session name (leer = fertig): " --placeholder "packer-labda") && [[ -n "$n" ]]; do
+              sessions+=("$n")
+            done
+          else
+            sessions+=("$s")
+          fi
+        done
+
+        palette=(terminal.ansiCyan terminal.ansiGreen terminal.ansiYellow terminal.ansiMagenta
+                 terminal.ansiBlue terminal.ansiRed terminal.ansiWhite terminal.ansiBrightCyan
+                 terminal.ansiBrightGreen terminal.ansiBrightYellow terminal.ansiBrightMagenta
+                 terminal.ansiBrightBlue terminal.ansiBrightRed)
+
+        gen='[]'
+        i=0
+        for s in "${sessions[@]}"; do
+          cur=$(jq -r --arg s "tmux:$s" '[.tasks[]? | select(.detail == $s) | .icon.color][0] // empty' <<<"$existing")
+          [[ -z "$cur" ]] && cur=${palette[$(( i % ${#palette[@]} ))]}
+          color=$(gum choose --header "Farbe für '$s':" --selected "$cur" "${palette[@]}")
+          gen=$(jq -c --arg s "$s" --arg c "$color" '. + [{
+              label: $s,
+              detail: ("tmux:" + $s),
+              type: "shell",
+              command: ("tmux new-session -A -s " + ($s | @sh)),
+              isBackground: true,
+              problemMatcher: [],
+              icon: { id: "terminal-tmux", color: $c },
+              presentation: { panel: "dedicated", reveal: "always", focus: false, echo: false, showReuseMessage: false },
+              runOptions: { runOn: "folderOpen" }
+            }]' <<<"$gen")
+          i=$((i + 1))
+        done
+
+        if (( ${#sessions[@]} > 0 )); then
+          gen=$(jq -c '. + [{
+              label: "tmux: alle Tabs",
+              detail: "tmux-group",
+              dependsOn: [ .[].label ],
+              problemMatcher: []
+            }]' <<<"$gen")
+        fi
+
+        mkdir -p "$dir/.vscode"
+        jq --argjson gen "$gen" '
+            .version //= "2.0.0"
+          | .tasks = ([.tasks[]? | select((.detail // "") | (startswith("tmux:") or . == "tmux-group") | not)] + $gen)
+          ' <<<"$existing" > "$file.tmp"
+        mv "$file.tmp" "$file"
+
+        if (( ${#sessions[@]} == 0 )); then
+          gum style --foreground 214 "Keine tmux-Tabs mehr in $file."
+        else
+          gum style --foreground 84 "✓ $file: ${sessions[*]}"
+          gum style --faint "VS Code: 'Tasks: Run Task' → 'tmux: alle Tabs' (oder Fenster neu laden)." \
+            "Einmalig nötig: \"task.allowAutomaticTasks\": \"on\" in den User-/Remote-Settings."
+        fi
