@@ -35,9 +35,10 @@ Interactive tmux session manager built on `gum`. Run with `task --taskfile tmux.
 
 VS Code Remote-SSH only brings terminal tabs back if the VS Code server is still running. After a VS Code update, a reboot or a timeout, the window reloads and the tabs are gone, even though the tmux sessions are still running. `tmux-vscode` makes the tabs declarative:
 
-- Pick sessions (running ones + ones already in the file are listed; `+ neue Session…` adds names that don't exist yet), then pick a color for each.
-- Each session becomes a task `tmux new-session -A -s <name>` with `runOn: folderOpen`, a dedicated panel and a `terminal-tmux` icon. A group task `tmux: alle Tabs` opens all of them by hand.
-- Generated entries are marked with `"detail": "tmux:<name>"`. Other tasks in `tasks.json` are kept. Re-run it to change colors or to remove tabs (deselect them).
+- Pick sessions (running ones + ones already in the file are listed; `+ neue Session…` adds names that don't exist yet), then pick a color and an optional start command for each.
+- Start command (e.g. `claude --continue`, `k9s`, empty = plain shell): only sent when the session does **not** exist yet, e.g. after a host reboot. It is typed into the session's shell, so you land back in that shell when it exits. An existing session is only attached, so nothing starts twice. It is stored as `options.env.TMUX_START_CMD` in the task.
+- Each session becomes a task (attach the session or create it) with `runOn: folderOpen`, a dedicated panel and a `terminal-tmux` icon. A group task `tmux: alle Tabs` opens all of them by hand.
+- Generated entries are marked with `"detail": "tmux:<name>"`. Other tasks in `tasks.json` are kept. Re-run it to change colors or start commands, or to remove tabs (deselect them).
 - One-time setup: set `"task.allowAutomaticTasks": "on"` in the user/remote settings, or click *Allow* when VS Code asks.
 - Run claude, k9s and similar tools *inside* the tmux session, not directly in the tab. Only then do they survive a reload.
 
