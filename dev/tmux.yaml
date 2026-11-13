@@ -251,14 +251,21 @@ tasks:
         NEW="+ neue Session…"
         choices=$( { printf '%s\n' "$configured" "$running" | sed '/^$/d' | sort -u; echo "$NEW"; } )
 
-        mapfile -t picked < <(gum choose --no-limit \
+        # Esc / Ctrl+C = abort without touching the file (an empty pick would
+        # otherwise remove every tab).
+        if ! pick_out=$(gum choose --no-limit \
           --header "Tabs für $dir (Space = an/aus, vorhandene sind markiert):" \
-          --selected "$(paste -sd, <<<"$configured")" <<<"$choices")
+          --selected "$(paste -sd, <<<"$configured")" <<<"$choices"); then
+          gum style --foreground 214 "Abgebrochen, $file unverändert."
+          exit 0
+        fi
+        mapfile -t picked <<<"$pick_out"
 
         sessions=()
         for s in "${picked[@]}"; do
+          [[ -z "${s//[[:space:]]/}" ]] && continue
           if [[ "$s" == "$NEW" ]]; then
-            while n=$(gum input --prompt "Session name (leer = fertig): " --placeholder "packer-labda") && [[ -n "$n" ]]; do
+            while n=$(gum input --prompt "Session name (leer = fertig): " --placeholder "packer-labda") && [[ -n "${n//[[:space:]]/}" ]]; do
               sessions+=("$n")
             done
           else
