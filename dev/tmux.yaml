@@ -206,14 +206,21 @@ tasks:
   # ============================================================================
   # VS Code: terminal tabs (name + color) that re-attach tmux sessions
   # ============================================================================
-  # Writes one task per session into <cwd>/.vscode/tasks.json. Each task runs
-  # `tmux new-session -A -s <name>` in a dedicated terminal tab with icon and
-  # color, and starts on folderOpen. So when VS Code Remote-SSH reloads instead
+  # Writes one task per session into <cwd>/.vscode/tasks.json. Each task
+  # attaches (or creates) tmux session <name> in a dedicated terminal tab with
+  # icon and color, and starts on folderOpen. So when VS Code Remote-SSH reloads instead
   # of reconnecting, the tabs come back on their own, attached to the still
   # running sessions (claude, k9s, ... must run inside tmux, not in the tab).
   #
+  # Optional start command per session (claude --continue, k9s, ...): it is
+  # only sent when the session does NOT exist yet (e.g. after a host reboot),
+  # typed into the session's shell, so you land in that shell when it exits.
+  # An existing session is just attached, nothing runs twice. Stored in the
+  # task as options.env.TMUX_START_CMD.
+  #
   # Generated entries carry `"detail": "tmux:<name>"`; other tasks in the file
-  # are kept. Re-run to add/remove sessions (deselect = remove) or change colors.
+  # are kept. Re-run to add/remove sessions (deselect = remove) or change
+  # colors / start commands.
   # Needs `"task.allowAutomaticTasks": "on"` in the user/remote settings (or
   # answer "Allow" once when VS Code asks).
 
@@ -267,14 +274,28 @@ tasks:
         gen='[]'
         i=0
         for s in "${sessions[@]}"; do
-          cur=$(jq -r --arg s "tmux:$s" '[.tasks[]? | select(.detail == $s) | .icon.color][0] // empty' <<<"$existing")
+          prev=$(jq -c --arg s "tmux:$s" '[.tasks[]? | select(.detail == $s)][0] // {}' <<<"$existing")
+          cur=$(jq -r '.icon.color // empty' <<<"$prev")
+          cur_cmd=$(jq -r '.options.env.TMUX_START_CMD // empty' <<<"$prev")
           [[ -z "$cur" ]] && cur=${palette[$(( i % ${#palette[@]} ))]}
           color=$(gum choose --header "Farbe für '$s':" --selected "$cur" "${palette[@]}")
-          gen=$(jq -c --arg s "$s" --arg c "$color" '. + [{
+          start=$(gum input --prompt "Startbefehl für '$s', nur wenn die Session neu angelegt wird (leer = Shell): " \
+            --value "$cur_cmd" --placeholder "claude --continue / k9s / leer") || start="$cur_cmd"
+
+          # has-session || (new-session -d + optional send-keys); then attach.
+          # `=name` = exact match, so "dev" never attaches "dev-2".
+          exact=$(jq -rn --arg s "=$s" '$s | @sh')
+          pane=$(jq -rn --arg s "=$s:" '$s | @sh')
+          cmd="tmux has-session -t $exact 2>/dev/null || { tmux new-session -d -s $(jq -rn --arg s "$s" '$s | @sh')"
+          cmd+=" && if [ -n \"\$TMUX_START_CMD\" ]; then tmux send-keys -t $pane \"\$TMUX_START_CMD\" Enter; fi; }"
+          cmd+="; exec tmux attach -t $exact"
+
+          gen=$(jq -c --arg s "$s" --arg c "$color" --arg cmd "$cmd" --arg start "$start" '. + [{
               label: $s,
               detail: ("tmux:" + $s),
               type: "shell",
-              command: ("tmux new-session -A -s " + ($s | @sh)),
+              command: $cmd,
+              options: { env: { TMUX_START_CMD: $start } },
               isBackground: true,
               problemMatcher: [],
               icon: { id: "terminal-tmux", color: $c },
