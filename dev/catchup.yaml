@@ -1,0 +1,253 @@
+---
+# Catch-up after a weekend: where do my Claude Code sessions stand, and which
+# issues in the org are new or have been lying around? Meant for the global
+# Taskfile (included remotely as `catchup`):
+#
+#   task -g catchup:sessions   # running Claude sessions (+ recently ended ones): tmux, branch, PRs, last answer
+#   task -g catchup:issues     # new open issues in the org + old ones involving me that went quiet
+#   task -g catchup:brief      # both of the above, analysed by `claude -p`: state per session,
+#                              # how new issues relate (to each other / to sessions), top 5 for today
+#
+# Vars (CLI `task -g catchup:brief DAYS=7` or env):
+#   ORG          GitHub org                          (default stuttgart-things)
+#   DAYS         "new" = created in the last N days  (default 7)
+#   STALE_DAYS   "quiet" = involves me, no update for N days (default 14)
+#   RECENT_DAYS  also list sessions that ENDED in the last N days (default 4, 0 = off)
+#   MODEL        model for catchup:brief             (default sonnet)
+#
+# Sessions come from ~/.claude/sessions/*.json (one file per running claude
+# process) and the transcripts under ~/.claude/projects/. Tokens/passwords in
+# transcripts are masked before anything is printed or sent to `claude -p`.
+# The brief is also stored in ~/.cache/catchup/<date>.md.
+# Needs: gh (logged in), jq, claude; gum is optional (pretty markdown).
+version: 3
+
+vars:
+  ORG: '{{.ORG | default "stuttgart-things"}}'
+  DAYS: '{{.DAYS | default "7"}}'
+  STALE_DAYS: '{{.STALE_DAYS | default "14"}}'
+  RECENT_DAYS: '{{.RECENT_DAYS | default "4"}}'
+  MODEL: '{{.MODEL | default "sonnet"}}'
+
+env:
+  CATCHUP_LIB: |
+    set -euo pipefail
+    CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+
+    # jq def: mask secrets that end up in transcripts (vault/gh/API tokens, FOO_TOKEN=..., password: ...).
+    REDACT='def redact: if type == "string" then
+        gsub("(hv[sbr]\\.[A-Za-z0-9_-]{20,}|\\bs\\.[A-Za-z0-9]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}|AKIA[A-Z0-9]{16})"; "***")
+        | gsub("(?<k>[A-Za-z_]*(TOKEN|PASSWORD|PASSWD|SECRET|API_KEY|ACCESS_KEY)[A-Za-z_]*[=:] *)[^ \"&;\\n]+"; "\(.k)***"; "i")
+      else . end;'
+
+    # One JSON object per session from its transcript: title, branch, PRs, last prompts, last answer.
+    transcript_info() {  # $1 = transcript path
+      local f="$1"
+      {
+        grep -h -E '"type":"(ai-title|custom-title)"' "$f" | tail -n 1 || true
+        grep -h '"type":"pr-link"' "$f" | tail -n 20 || true
+        tail -n 400 "$f" | grep -h '"gitBranch"' | tail -n 1 || true
+        grep -h '"type":"user"' "$f" | tail -n 600 || true
+        grep -h '"type":"assistant"' "$f" | tail -n 60 || true
+      } | jq -s "$REDACT"'
+          def txt: if type == "string" then . else ([.[]? | select(.type == "text") | .text] | join("\n")) end;
+          {
+            title:  ([.[] | select(.type == "custom-title" or .type == "ai-title") | (.customTitle // .aiTitle)] | last // "" | redact),
+            branch: ([.[] | .gitBranch // empty] | last // ""),
+            prs:    ([.[] | select(.type == "pr-link") | .prUrl] | unique),
+            prompts: ([.[] | select(.type == "user" and (.message.content | type) == "string") | .message.content
+                       | select(startswith("<") | not) | select(startswith("This session is being continued") | not)
+                       | .[0:300] | redact] | .[-5:]),
+            last: ([.[] | select(.type == "assistant") | .message.content | txt | select(length > 0)] | last // "" | .[-1500:] | redact)
+          }'
+    }
+
+    # All sessions as a JSON array: running ones + (RECENT_DAYS) ended ones.
+    collect_sessions() {
+      local now_ms live_ids="" out=()
+      now_ms=$(( $(date +%s) * 1000 ))
+      for s in "$CLAUDE_DIR"/sessions/*.json; do
+        [ -e "$s" ] || continue
+        local pid sid cwd t
+        pid=$(jq -r '.pid' "$s"); sid=$(jq -r '.sessionId' "$s")
+        jq -e '.kind == "interactive"' "$s" >/dev/null || continue
+        [ -d "/proc/$pid" ] || continue
+        live_ids+=" $sid"
+        t=$(ls "$CLAUDE_DIR"/projects/*/"$sid".jsonl 2>/dev/null | head -n 1 || true)
+        info='{}'; [ -n "$t" ] && info=$(transcript_info "$t")
+        out+=("$(jq -c --argjson i "$info" --argjson now "$now_ms" '{
+            state: .status, waiting: (.waitingFor // ""), name, pid, sessionId, cwd,
+            tmux: ((.tmux // "") | sub(":.*"; "")), tmuxTarget: (.tmux // ""),
+            idleMin: ((($now - (.updatedAt // .startedAt)) / 60000) | floor)
+          } + $i' "$s")")
+      done
+      if [ "${RECENT_DAYS:-0}" -gt 0 ]; then
+        while IFS= read -r t; do
+          local sid; sid=$(basename "$t" .jsonl)
+          case "$live_ids" in *"$sid"*) continue;; esac
+          [ "$(wc -l < "$t")" -ge 30 ] || continue
+          local meta; meta=$(grep -m1 -h '"cwd"' "$t" | jq -c '{cwd, entrypoint}')
+          [ "$(jq -r .entrypoint <<<"$meta")" = "cli" ] || continue
+          local cwd; cwd=$(jq -r .cwd <<<"$meta")
+          case "$cwd" in /tmp/*) continue;; esac
+          out+=("$(jq -c --argjson i "$(transcript_info "$t")" --arg sid "$sid" --arg cwd "$cwd" \
+              --argjson idle $(( ( $(date +%s) - $(stat -c %Y "$t") ) / 60 )) -n '{
+            state: "ended", waiting: "", name: ($cwd | split("/") | last), pid: null, sessionId: $sid, cwd: $cwd,
+            tmux: "", tmuxTarget: "", idleMin: $idle } + $i')")
+        done < <(find "$CLAUDE_DIR"/projects -maxdepth 2 -name '*.jsonl' -mtime "-$RECENT_DAYS" 2>/dev/null)
+      fi
+      # a session resumed in two terminals shows up twice -> mark it
+      printf '%s\n' "${out[@]}" | jq -s 'sort_by(.idleMin)
+        | (group_by(.sessionId) | map(select(length > 1) | .[0].sessionId)) as $dup
+        | map(. + {duplicate: (.sessionId as $s | $dup | index($s) != null)})'
+    }
+
+    ago() {  # minutes -> "5m" / "3h" / "2d"
+      local m=$1
+      if [ "$m" -lt 60 ]; then echo "${m}m"; elif [ "$m" -lt 2880 ]; then echo "$((m / 60))h"; else echo "$((m / 1440))d"; fi
+    }
+
+    render_sessions() {  # stdin: JSON array from collect_sessions
+      local json; json=$(cat)
+      local n; n=$(jq length <<<"$json")
+      [ "$n" -gt 0 ] || { echo "Keine Claude-Sessions gefunden."; return; }
+      jq -c '.[]' <<<"$json" | while IFS= read -r s; do
+        local state icon where pr_line=""
+        state=$(jq -r .state <<<"$s")
+        case "$state" in
+          busy) icon="🟢 arbeitet";; waiting) icon="⏳ wartet auf dich";; idle) icon="💤 idle";;
+          ended) icon="⚫ beendet";; *) icon="❔ $state";;
+        esac
+        if [ "$state" = ended ]; then
+          where="fortsetzen: cd $(jq -r .cwd <<<"$s") && claude --resume $(jq -r .sessionId <<<"$s")"
+        elif [ -n "$(jq -r .tmux <<<"$s")" ]; then
+          where="tmux: $(jq -r .tmux <<<"$s")  (tmux switch -t '$(jq -r .tmuxTarget <<<"$s")')"
+        else
+          where="pid $(jq -r .pid <<<"$s") (ohne tmux)"
+        fi
+        for url in $(jq -r '.prs[-3:][]?' <<<"$s"); do
+          pr_line+="$(sed -E 's#https://github.com/([^/]+/[^/]+)/pull/#\1\##' <<<"$url") $(gh pr view "$url" --json state -q .state 2>/dev/null || echo '?')  "
+        done
+        echo "$icon · $(jq -r .name <<<"$s") · vor $(ago "$(jq -r .idleMin <<<"$s")")$(jq -r 'if .duplicate then "  ⚠️ gleiche Session in 2 Terminals" else "" end' <<<"$s")"
+        echo "   $(jq -r '"„" + (if .title == "" then "(ohne Titel)" else .title end) + "“  ·  " + (.cwd | sub(env.HOME; "~")) + (if .branch != "" then "  (" + .branch + ")" else "" end)' <<<"$s")"
+        echo "   $where"
+        [ -n "$pr_line" ] && echo "   PRs: $pr_line"
+        jq -r '.last | split("\n") | map(select(test("\\S"))) | .[-3:][] | "   │ " + .[0:160]' <<<"$s"
+        echo
+      done
+    }
+
+    # Issues as JSON: {new: [...], quiet: [...]}; $1 = "body" to also fetch (shortened) bodies.
+    collect_issues() {
+      local fields="repository,number,title,labels,createdAt,updatedAt,author,assignees,commentsCount,url"
+      [ "${1:-}" = body ] && fields+=",body"
+      local since quiet_before
+      since=$(date -d "-$DAYS days" +%F); quiet_before=$(date -d "-$STALE_DAYS days" +%F)
+      # piped, not --argjson: with bodies the JSON exceeds the argument size limit
+      {
+        gh search issues --owner "$ORG" --state open --created ">=$since" --sort created --limit 100 --json "$fields"
+        gh search issues --owner "$ORG" --state open --involves @me --updated "<$quiet_before" --sort updated --limit 40 --json "$fields"
+      } | jq -s "$REDACT"'
+        .[0] as $new | .[1] as $quiet
+        | def slim: map(select((.author.login | test("\\[bot\\]$|^app/")) | not)
+                      | select([.labels[].name] | index("daily-pr-report") | not)
+                      | {ref: "\(.repository.nameWithOwner | split("/") | last)#\(.number)", title: (.title | redact), url,
+                         labels: [.labels[].name], created: .createdAt[0:10], updated: .updatedAt[0:10],
+                         author: .author.login, assignees: [.assignees[].login], comments: .commentsCount}
+                        + (if .body then {body: (.body | .[0:700] | redact)} else {} end));
+        {new: ($new | slim), quiet: ($quiet | slim)}'
+    }
+
+    render_issues() {  # stdin: JSON from collect_issues
+      local json; json=$(cat)
+      echo "🆕 Neu in $ORG (letzte $DAYS Tage): $(jq '.new | length' <<<"$json")"
+      jq -r '.new[] | "   \(.created)  \(.ref | . + " " * ([24 - length, 0] | max))  \(.title | .[0:90])\(if (.labels | length) > 0 then "  [" + (.labels | join(",")) + "]" else "" end)"' <<<"$json"
+      echo
+      echo "🕸️  Mit dir verknüpft, seit $STALE_DAYS+ Tagen ruhig: $(jq '.quiet | length' <<<"$json")"
+      jq -r '.quiet[] | "   \(.updated)  \(.ref | . + " " * ([24 - length, 0] | max))  \(.title | .[0:90])"' <<<"$json"
+    }
+
+    show_md() { if command -v gum >/dev/null; then gum format < "$1"; else cat "$1"; fi; }
+
+tasks:
+  default:
+    desc: "catchup: show available tasks"
+    silent: true
+    cmds:
+      - task --list
+
+  sessions:
+    desc: "catchup: running Claude sessions (+ ended in RECENT_DAYS) -- tmux, branch, PRs, last answer"
+    aliases: [s]
+    silent: true
+    env:
+      RECENT_DAYS: '{{.RECENT_DAYS}}'
+    cmds:
+      - |
+        eval "$CATCHUP_LIB"
+        collect_sessions | render_sessions
+
+  issues:
+    desc: "catchup: new open issues in ORG (DAYS) + issues involving me that went quiet (STALE_DAYS)"
+    aliases: [i]
+    silent: true
+    env:
+      ORG: '{{.ORG}}'
+      DAYS: '{{.DAYS}}'
+      STALE_DAYS: '{{.STALE_DAYS}}'
+    cmds:
+      - |
+        eval "$CATCHUP_LIB"
+        collect_issues | render_issues
+
+  brief:
+    desc: "catchup: sessions + issues analysed by claude -p -- state per session, issue relations, top 5 for today"
+    aliases: [b]
+    silent: true
+    env:
+      ORG: '{{.ORG}}'
+      DAYS: '{{.DAYS}}'
+      STALE_DAYS: '{{.STALE_DAYS}}'
+      RECENT_DAYS: '{{.RECENT_DAYS}}'
+      MODEL: '{{.MODEL}}'
+    cmds:
+      - |
+        eval "$CATCHUP_LIB"
+        command -v claude >/dev/null || { echo "catchup: claude CLI not found" >&2; exit 1; }
+        out_dir="${XDG_CACHE_HOME:-$HOME/.cache}/catchup"; mkdir -p "$out_dir"
+        out="$out_dir/$(date +%F_%H%M).md"; ctx=$(mktemp); trap 'rm -f "$ctx"' EXIT
+
+        echo "⏳ Sessions und Issues einsammeln…" >&2
+        {
+          echo "# Kontext (Stand $(date '+%A %F %H:%M'))"
+          echo "## Claude-Code-Sessions (JSON; state: busy/idle/waiting = läuft, ended = beendet; idleMin = Minuten seit letzter Aktivität)"
+          collect_sessions
+          echo "## GitHub-Issues in $ORG (new = offen, in den letzten $DAYS Tagen erstellt; quiet = offen, mit mir verknüpft, seit $STALE_DAYS+ Tagen ohne Update)"
+          collect_issues body
+        } > "$ctx"
+
+        echo "🤖 Analyse mit claude -p ($MODEL)…" >&2
+        claude -p --model "$MODEL" --tools "" --no-session-persistence \
+          --append-system-prompt "Du bist ein knapper, präziser Assistent für ein Wiedereinstiegs-Briefing. Antworte auf Deutsch in Markdown. Erfinde nichts; wenn etwas aus dem Kontext nicht hervorgeht, sag das." \
+          > "$out" <<PROMPT
+        $(cat "$ctx")
+
+        ---
+        Erstelle daraus ein Briefing, damit ich nach einer Pause (z. B. Wochenende) gezielt wieder anknüpfen kann:
+
+        ## 1. Sessions – wo stehe ich?
+        Pro Session (laufende zuerst, beendete danach) ein kurzer Block: **Name** (tmux-Session bzw. Resume-Befehl), Thema, Stand in 1–2 Sätzen, **nächster konkreter Schritt** (ableiten aus letzter Antwort / offenen Punkten), zugehörige Issues/PRs.
+        Markiere: Sessions, die auf mich warten; Sessions, die erledigt wirken und geschlossen werden können; Sessions, die doppelt laufen oder am selben Thema arbeiten.
+
+        ## 2. Neue Issues – Themen und Zusammenhänge
+        Gruppiere die neuen Issues nach Thema. Nenne Zusammenhänge: Duplikate, Abhängigkeiten, gehört zu Tracking-Issue X, wird schon in Session Y bearbeitet, wurde in einer Session als offener Punkt erwähnt aber hat noch kein Issue (oder umgekehrt). Issue-Referenzen immer als repo#nr.
+
+        ## 3. Liegen geblieben
+        Aus den ruhigen Issues: welche wirken wichtig (Fehler, Sicherheit, Blocker für anderes, Tracking) und sollten wieder aufgenommen oder bewusst geschlossen werden? Kurz begründen. Unwichtiges weglassen.
+
+        ## 4. Vorschlag für heute
+        Top 5, priorisiert, jeweils mit Einstieg (welche Session / welches Issue).
+        PROMPT
+
+        show_md "$out"
+        echo >&2; echo "📄 gespeichert: $out" >&2
