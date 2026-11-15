@@ -56,3 +56,22 @@ task -t /home/sthings/projects/tasks/dev/tmux.yaml ta
 ```
 
 To use the short aliases globally, either symlink `tmux.yaml` into a directory you `cd` into often, or wrap the calls in shell functions / aliases in your `.bashrc`/`.zshrc`.
+
+### `catchup.yaml`
+
+Catch-up after a break: where do the running Claude Code sessions stand, and which issues in the org are new or have gone quiet? Include it remotely as `catchup` in the global Taskfile.
+
+| Task | Alias | What it does |
+|------|-------|--------------|
+| `sessions` | `s` | Running Claude sessions (from `~/.claude/sessions`) plus ones ended in the last `RECENT_DAYS`: status (busy / waiting / idle / ended), tmux target or `claude --resume` command, branch, PRs with state, the last lines of the last answer. Flags one session open in two terminals. |
+| `issues` | `i` | Open issues in `ORG` created in the last `DAYS`, plus open issues involving you without an update for `STALE_DAYS`. Bots and daily PR reports are left out. |
+| `brief` | `b` | Both of the above sent to `claude -p` (`MODEL`, no tools, not saved as a session): state and next step per session, new issues grouped by topic with relations (duplicates, tracking issues, which session works on what), forgotten important issues, top 5 for today. Saved in `~/.cache/catchup/<date>.md`. |
+
+Vars: `ORG` (stuttgart-things), `DAYS` (7), `STALE_DAYS` (14), `RECENT_DAYS` (4), `MODEL` (sonnet). Tokens and passwords in transcripts are masked before anything is printed or sent. Needs `gh`, `jq`, `claude`; `gum` is optional.
+
+```yaml
+# ~/Taskfile.yml
+includes:
+  catchup:
+    taskfile: https://raw.githubusercontent.com/stuttgart-things/tasks/refs/heads/main/dev/catchup.yaml
+```
